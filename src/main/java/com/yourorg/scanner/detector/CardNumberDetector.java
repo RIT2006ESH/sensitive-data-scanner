@@ -1,0 +1,40 @@
+package com.yourorg.scanner.detector;
+
+import com.yourorg.scanner.model.SensitiveDataType;
+import org.springframework.stereotype.Component;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * Finds candidate credit/debit card numbers: 13-19 digits, optionally
+ * grouped with spaces or hyphens. Luhn validation happens later, in the
+ * validator layer — this class only does pattern matching.
+ */
+@Component
+public class CardNumberDetector implements SensitiveDataDetector {
+
+    private static final Pattern CARD_PATTERN =
+            Pattern.compile("\\b(?:\\d[ -]?){12,18}\\d\\b");
+
+    @Override
+    public SensitiveDataType getType() {
+        return SensitiveDataType.CARD_NUMBER;
+    }
+
+    @Override
+    public List<String> detectCandidates(String text) {
+        List<String> candidates = new ArrayList<>();
+        if (text == null || text.isEmpty()) {
+            return candidates;
+        }
+
+        Matcher matcher = CARD_PATTERN.matcher(text);
+        while (matcher.find()) {
+            candidates.add(matcher.group());
+        }
+        return candidates;
+    }
+}

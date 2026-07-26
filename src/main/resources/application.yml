@@ -1,0 +1,32 @@
+spring:
+  application:
+    name: sensitive-data-scanner
+
+scanner:
+  # Drives/folders to scan recursively
+  target-drives:
+    - C:\
+    - D:\
+
+  # File extensions eligible for text extraction (without the dot)
+  supported-extensions:
+    - pdf
+    - docx
+    - xlsx
+    - txt
+    - csv
+
+  # Folders to skip entirely (system/noisy folders slow the scan and add no value)
+  excluded-paths:
+    - C:\Windows
+    - C:\Program Files
+    - C:\Program Files (x86)
+    - C:\$Recycle.Bin
+
+  # Cron expression: run daily at 2:00 AM
+  schedule-cron: "0 0 2 * * *"
+
+  # Where the generated scan report is written
+  report:
+    output-directory: reports
+    format: csv
