@@ -26,7 +26,7 @@ public class CsvReportGenerator implements ReportGenerator {
         Path reportPath = outputDirectory.resolve(fileName);
 
         CSVFormat format = CSVFormat.DEFAULT.builder()
-                .setHeader("File Name", "File Path", "Sensitive Data Type", "Masked Value", "Scan Timestamp")
+                .setHeader("File Name", "File Path", "Sensitive Data Type", "Risk Level", "Masked Value", "Scan Timestamp")
                 .build();
 
         try (Writer writer = Files.newBufferedWriter(reportPath);
@@ -37,6 +37,7 @@ public class CsvReportGenerator implements ReportGenerator {
                         result.getFileName(),
                         result.getFilePath(),
                         result.getDataType(),
+                        result.getRiskLevel(),
                         result.getMaskedValue(),
                         result.getScanTimestamp().format(TIMESTAMP_FORMAT)
                 );

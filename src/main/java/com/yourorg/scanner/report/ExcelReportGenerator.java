@@ -21,7 +21,7 @@ import java.util.List;
 public class ExcelReportGenerator implements ReportGenerator {
 
     private static final String[] HEADERS = {
-            "File Name", "File Path", "Sensitive Data Type", "Masked Value", "Scan Timestamp"
+            "File Name", "File Path", "Sensitive Data Type", "Risk Level", "Masked Value", "Scan Timestamp"
     };
 
     private static final DateTimeFormatter TIMESTAMP_FORMAT =
@@ -71,8 +71,9 @@ public class ExcelReportGenerator implements ReportGenerator {
             row.createCell(0).setCellValue(result.getFileName());
             row.createCell(1).setCellValue(result.getFilePath());
             row.createCell(2).setCellValue(result.getDataType().name());
-            row.createCell(3).setCellValue(result.getMaskedValue());
-            row.createCell(4).setCellValue(result.getScanTimestamp().format(TIMESTAMP_FORMAT));
+            row.createCell(3).setCellValue(result.getRiskLevel().name());
+            row.createCell(4).setCellValue(result.getMaskedValue());
+            row.createCell(5).setCellValue(result.getScanTimestamp().format(TIMESTAMP_FORMAT));
         }
     }
 

@@ -24,7 +24,7 @@ scanner:
     - C:\$Recycle.Bin
 
   # Cron expression: run daily at 2:00 AM
-  schedule-cron: "0 0 2 * * *"
+  schedule-cron: "*/10 * * * * *"
 
   # Where the generated scan report is written
   report:

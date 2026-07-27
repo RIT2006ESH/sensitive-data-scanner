@@ -7,6 +7,7 @@ import com.yourorg.scanner.detector.SensitiveDataDetector;
 import com.yourorg.scanner.extractor.ExtractorFactory;
 import com.yourorg.scanner.extractor.TextExtractor;
 import com.yourorg.scanner.mask.DataMasker;
+import com.yourorg.scanner.model.RiskLevel;
 import com.yourorg.scanner.model.ScanResult;
 import com.yourorg.scanner.model.ScanSummary;
 import com.yourorg.scanner.model.SensitiveDataType;
@@ -25,12 +26,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * Coordinates the full scan pipeline end-to-end:
- * walk -> extract -> detect -> validate -> mask -> aggregate -> report.
- * This is the single class that ties every other layer together; nothing
- * here does the actual extraction/detection/validation work itself.
- */
 @Component
 public class ScanOrchestrator {
 
@@ -44,6 +39,7 @@ public class ScanOrchestrator {
     private final AadhaarChecksumValidator aadhaarValidator;
     private final DataMasker dataMasker;
     private final ReportWriterFactory reportWriterFactory;
+    private final RiskClassifier riskClassifier;
 
     public ScanOrchestrator(AppProperties appProperties,
                             FileWalker fileWalker,
@@ -52,7 +48,8 @@ public class ScanOrchestrator {
                             LuhnValidator luhnValidator,
                             AadhaarChecksumValidator aadhaarValidator,
                             DataMasker dataMasker,
-                            ReportWriterFactory reportWriterFactory) {
+                            ReportWriterFactory reportWriterFactory,
+                            RiskClassifier riskClassifier) {
         this.appProperties = appProperties;
         this.fileWalker = fileWalker;
         this.extractorFactory = extractorFactory;
@@ -61,13 +58,9 @@ public class ScanOrchestrator {
         this.aadhaarValidator = aadhaarValidator;
         this.dataMasker = dataMasker;
         this.reportWriterFactory = reportWriterFactory;
+        this.riskClassifier = riskClassifier;
     }
 
-    /**
-     * Runs one complete scan: discovers files, processes each one, then
-     * writes the final report. Any per-file failure is logged and skipped
-     * rather than aborting the whole run.
-     */
     public ScanSummary runScan() {
         String runId = UUID.randomUUID().toString();
         ScanContext context = new ScanContext(runId, LocalDateTime.now());
@@ -132,17 +125,19 @@ public class ScanOrchestrator {
         return switch (type) {
             case CARD_NUMBER -> luhnValidator.isValid(candidate);
             case AADHAAR_NUMBER -> aadhaarValidator.isValid(candidate);
-            case PAN_NUMBER -> true; // regex format check in the detector IS the validation
+            case PAN_NUMBER -> true;
         };
     }
 
     private void recordFinding(String candidate, SensitiveDataType type, Path file, ScanContext context) {
         String maskedValue = dataMasker.mask(candidate, type);
+        RiskLevel riskLevel = riskClassifier.classify(type);
 
         ScanResult result = new ScanResult(
                 file.getFileName().toString(),
                 file.toAbsolutePath().toString(),
                 type,
+                riskLevel,
                 maskedValue,
                 LocalDateTime.now()
         );
