@@ -15,11 +15,6 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Recursively walks each configured target drive/folder and returns every
- * file found, skipping excluded paths and any location that raises an
- * access error (e.g. permission denied) rather than aborting the whole scan.
- */
 @Component
 public class FileWalker {
 
@@ -31,10 +26,6 @@ public class FileWalker {
         this.appProperties = appProperties;
     }
 
-    /**
-     * @return every file discovered under all configured target drives,
-     *         excluding paths listed in scanner.excluded-paths
-     */
     public List<Path> walk() {
         List<Path> discoveredFiles = new ArrayList<>();
 
@@ -73,7 +64,9 @@ public class FileWalker {
 
                 @Override
                 public FileVisitResult visitFileFailed(Path file, IOException exc) {
-                    log.warn("Could not access file, skipping: {} ({})", file, exc.getMessage());
+                    // Access-denied on protected system paths is expected on Windows.
+                    // Genuinely unexpected failures still show at DEBUG for troubleshooting.
+                    log.debug("Could not access, skipping: {} ({})", file, exc.getMessage());
                     return FileVisitResult.CONTINUE;
                 }
             });
@@ -83,9 +76,9 @@ public class FileWalker {
     }
 
     private boolean isExcluded(Path dir) {
-        String dirString = dir.toString();
         for (String excludedPath : appProperties.getExcludedPaths()) {
-            if (dirString.equalsIgnoreCase(excludedPath) || dirString.startsWith(excludedPath)) {
+            Path excluded = Paths.get(excludedPath);
+            if (dir.equals(excluded) || dir.startsWith(excluded)) {
                 return true;
             }
         }

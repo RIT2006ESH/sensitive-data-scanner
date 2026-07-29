@@ -1,6 +1,6 @@
 package com.yourorg.scanner.scheduler;
 
-import com.yourorg.scanner.core.ScanOrchestrator;
+import com.yourorg.scanner.core.ScanRunRecord;
 import com.yourorg.scanner.model.ScanSummary;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,9 +17,9 @@ public class ScanScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(ScanScheduler.class);
 
-    private final ScanOrchestrator scanOrchestrator;
+    private final ScanRunRecord scanOrchestrator;
 
-    public ScanScheduler(ScanOrchestrator scanOrchestrator) {
+    public ScanScheduler(ScanRunRecord scanOrchestrator) {
         this.scanOrchestrator = scanOrchestrator;
     }
 

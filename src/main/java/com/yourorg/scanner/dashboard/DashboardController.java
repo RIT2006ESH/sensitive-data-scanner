@@ -1,6 +1,6 @@
 package com.yourorg.scanner.dashboard;
 
-import com.yourorg.scanner.core.ScanOrchestrator;
+import com.yourorg.scanner.core.ScanRunRecord;
 import com.yourorg.scanner.model.ScanResult;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
@@ -23,23 +23,23 @@ import java.util.stream.Collectors;
 public class DashboardController {
 
     private final ScanResultsHolder resultsHolder;
-    private final ScanOrchestrator scanOrchestrator;
+    private final ScanRunRecord scanOrchestrator;
 
-    public DashboardController(ScanResultsHolder resultsHolder, ScanOrchestrator scanOrchestrator) {
+    public DashboardController(ScanResultsHolder resultsHolder, ScanRunRecord scanOrchestrator) {
         this.resultsHolder = resultsHolder;
         this.scanOrchestrator = scanOrchestrator;
     }
 
     @GetMapping("/current")
     public ResponseEntity<ScanRunSummaryDto> getCurrent() {
-        Optional<ScanRunRecord> run = resultsHolder.getCurrentRun().or(resultsHolder::getLatestRun);
+        Optional<com.yourorg.scanner.dashboard.ScanRunRecord> run = resultsHolder.getCurrentRun().or(resultsHolder::getLatestRun);
         return run.map(r -> ResponseEntity.ok(ScanRunSummaryDto.from(r)))
                 .orElse(ResponseEntity.noContent().build());
     }
 
     @GetMapping("/current/findings")
     public ResponseEntity<List<ScanResult>> getCurrentFindings() {
-        Optional<ScanRunRecord> run = resultsHolder.getCurrentRun().or(resultsHolder::getLatestRun);
+        Optional<com.yourorg.scanner.dashboard.ScanRunRecord> run = resultsHolder.getCurrentRun().or(resultsHolder::getLatestRun);
         return run.map(r -> ResponseEntity.ok(r.getFindings()))
                 .orElse(ResponseEntity.ok(List.of()));
     }
@@ -53,7 +53,7 @@ public class DashboardController {
 
     @GetMapping("/{runId}/download")
     public ResponseEntity<Resource> downloadReport(@PathVariable String runId) {
-        Optional<ScanRunRecord> runOpt = resultsHolder.getRun(runId);
+        Optional<com.yourorg.scanner.dashboard.ScanRunRecord> runOpt = resultsHolder.getRun(runId);
         if (runOpt.isEmpty() || runOpt.get().getReportPath() == null) {
             return ResponseEntity.notFound().build();
         }
