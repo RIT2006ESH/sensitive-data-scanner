@@ -76,9 +76,12 @@ public class FileWalker {
     }
 
     private boolean isExcluded(Path dir) {
+        String dirString = dir.toString();
         for (String excludedPath : appProperties.getExcludedPaths()) {
-            Path excluded = Paths.get(excludedPath);
-            if (dir.equals(excluded) || dir.startsWith(excluded)) {
+            if (excludedPath == null || excludedPath.isBlank()) {
+                continue;
+            }
+            if (dirString.equalsIgnoreCase(excludedPath) || dirString.startsWith(excludedPath)) {
                 return true;
             }
         }

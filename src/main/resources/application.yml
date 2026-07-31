@@ -4,8 +4,7 @@ spring:
 
 scanner:
   target-drives:
-    - C:\
-    - D:\
+    - C:\Users\Asus\Desktop\test-scan-folder
 
   supported-extensions:
     - pdf
@@ -14,40 +13,37 @@ scanner:
     - txt
     - csv
 
-  # Folders to skip entirely (system/noisy folders slow the scan and add no value)
   excluded-paths:
     - C:\Windows
-      - C:\Program Files
-      - C:\Program Files (x86)
-      - C:\$Recycle.Bin
-      - C:\ProgramData\Microsoft\Windows\WER
-      - C:\ProgramData\Microsoft\Windows Defender
-      - C:\ProgramData\Microsoft\Crypto
-      - C:\ProgramData\Microsoft\Windows
-      - C:\ProgramData\Microsoft\Network\Downloader
-      - C:\ProgramData\Microsoft\Search\Data
-      - C:\ProgramData\Microsoft\SmsRouter
-      - C:\ProgramData\Microsoft\Diagnosis
-      - C:\ProgramData\Microsoft\Provisioning
-      - C:\ProgramData\Package Cache
-      - C:\ProgramData\Packages
-      - C:\ProgramData\ASUS
-      - C:\ProgramData\Intel
-      - C:\ProgramData\McAfee
-      - C:\ProgramData\Application Data
-      - C:\ProgramData\Desktop
-      - C:\ProgramData\Documents
-      - C:\ProgramData\Start Menu
-      - C:\ProgramData\Templates
-      - C:\Documents and Settings
-      - C:\PerfLogs
-      - C:\Recovery
-      - C:\System Volume Information
+    - C:\Program Files
+    - C:\Program Files (x86)
+    - C:\$Recycle.Bin
+    - C:\ProgramData\Microsoft\Windows\WER
+    - C:\ProgramData\Microsoft\Windows Defender
+    - C:\ProgramData\Microsoft\Crypto
+    - C:\ProgramData\Microsoft\Windows
+    - C:\ProgramData\Microsoft\Network\Downloader
+    - C:\ProgramData\Microsoft\Search\Data
+    - C:\ProgramData\Microsoft\SmsRouter
+    - C:\ProgramData\Microsoft\Diagnosis
+    - C:\ProgramData\Microsoft\Provisioning
+    - C:\ProgramData\Package Cache
+    - C:\ProgramData\Packages
+    - C:\ProgramData\ASUS
+    - C:\ProgramData\Intel
+    - C:\ProgramData\McAfee
+    - C:\ProgramData\Application Data
+    - C:\ProgramData\Desktop
+    - C:\ProgramData\Documents
+    - C:\ProgramData\Start Menu
+    - C:\ProgramData\Templates
+    - C:\Documents and Settings
+    - C:\PerfLogs
+    - C:\Recovery
+    - C:\System Volume Information
 
-  # Cron expression: run daily at 2:00 AM
   schedule-cron: "*/10 * * * * *"
 
-  # Where the generated scan report is written
   report:
     output-directory: reports
     format: csv
