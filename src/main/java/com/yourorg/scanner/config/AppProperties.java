@@ -5,11 +5,6 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 
-/**
- * Binds the `scanner:` block from application.yml into a strongly-typed
- * configuration object, so the rest of the app never reads raw YAML/properties
- * directly — it just asks Spring for this bean.
- */
 @Component
 @ConfigurationProperties(prefix = "scanner")
 public class AppProperties {

@@ -36,7 +36,7 @@ import java.util.UUID;
  * poll current status, current file, and risk-categorized findings.
  */
 @Component
-public class ScanRunRecord {
+public class ScanOrchestrator {
 
     private static final Logger log = LoggerFactory.getLogger(ScanOrchestrator.class);
 
