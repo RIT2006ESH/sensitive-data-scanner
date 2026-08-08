@@ -12,9 +12,15 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
+/**
+ * Walks configured target drives and streams each discovered file to a
+ * callback as soon as it's found, rather than collecting a full list
+ * first. This lets processing (and any live progress reporting) start
+ * immediately instead of waiting for an entire drive to be enumerated.
+ */
 @Component
 public class FileWalker {
 
@@ -26,9 +32,7 @@ public class FileWalker {
         this.appProperties = appProperties;
     }
 
-    public List<Path> walk() {
-        List<Path> discoveredFiles = new ArrayList<>();
-
+    public void walk(Consumer<Path> fileHandler) {
         for (String drive : appProperties.getTargetDrives()) {
             Path rootPath = Paths.get(drive);
 
@@ -37,13 +41,11 @@ public class FileWalker {
                 continue;
             }
 
-            walkSingleRoot(rootPath, discoveredFiles);
+            walkSingleRoot(rootPath, fileHandler);
         }
-
-        return discoveredFiles;
     }
 
-    private void walkSingleRoot(Path rootPath, List<Path> discoveredFiles) {
+    private void walkSingleRoot(Path rootPath, Consumer<Path> fileHandler) {
         try {
             Files.walkFileTree(rootPath, new SimpleFileVisitor<Path>() {
 
@@ -58,14 +60,12 @@ public class FileWalker {
 
                 @Override
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                    discoveredFiles.add(file);
+                    fileHandler.accept(file);
                     return FileVisitResult.CONTINUE;
                 }
 
                 @Override
                 public FileVisitResult visitFileFailed(Path file, IOException exc) {
-                    // Access-denied on protected system paths is expected on Windows.
-                    // Genuinely unexpected failures still show at DEBUG for troubleshooting.
                     log.debug("Could not access, skipping: {} ({})", file, exc.getMessage());
                     return FileVisitResult.CONTINUE;
                 }
@@ -76,12 +76,34 @@ public class FileWalker {
     }
 
     private boolean isExcluded(Path dir) {
-        String dirString = dir.toString();
-        for (String excludedPath : appProperties.getExcludedPaths()) {
-            if (excludedPath == null || excludedPath.isBlank()) {
-                continue;
+        if (isExcludedByPath(dir)) {
+            return true;
+        }
+        return isExcludedByFolderName(dir);
+    }
+
+    private boolean isExcludedByPath(Path dir) {
+        List<String> excludedPaths = appProperties.getExcludedPaths();
+        if (excludedPaths == null) {
+            return false;
+        }
+        for (String excludedPath : excludedPaths) {
+            Path excluded = Paths.get(excludedPath);
+            if (dir.equals(excluded) || dir.startsWith(excluded)) {
+                return true;
             }
-            if (dirString.equalsIgnoreCase(excludedPath) || dirString.startsWith(excludedPath)) {
+        }
+        return false;
+    }
+
+    private boolean isExcludedByFolderName(Path dir) {
+        List<String> excludedFolderNames = appProperties.getExcludedFolderNames();
+        if (excludedFolderNames == null || dir.getFileName() == null) {
+            return false;
+        }
+        String dirName = dir.getFileName().toString();
+        for (String excludedName : excludedFolderNames) {
+            if (dirName.equalsIgnoreCase(excludedName)) {
                 return true;
             }
         }

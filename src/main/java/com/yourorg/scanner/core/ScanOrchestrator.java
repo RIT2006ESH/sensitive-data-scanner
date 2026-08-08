@@ -28,13 +28,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * Coordinates the full scan pipeline end-to-end:
- * walk -> extract -> detect -> validate -> mask -> classify risk ->
- * record (for the dashboard) -> report.
- * Every run is tracked live in ScanResultsHolder so the web dashboard can
- * poll current status, current file, and risk-categorized findings.
- */
 @Component
 public class ScanOrchestrator {
 
@@ -76,31 +69,41 @@ public class ScanOrchestrator {
     public ScanSummary runScan() {
         String runId = UUID.randomUUID().toString();
         LocalDateTime startTime = LocalDateTime.now();
-        ScanRunRecord record = resultsHolder.startRun(runId, startTime);
+        ScanContext context = new ScanContext(runId, startTime);
+        ScanRunRecord runRecord = resultsHolder.startRun(runId, startTime);
 
         log.info("Starting scan run {}", runId);
 
         try {
-            List<Path> discoveredFiles = fileWalker.walk();
-            log.info("Discovered {} files to process", discoveredFiles.size());
+            fileWalker.walk(file -> {
+                runRecord.setCurrentFile(file.toString());
+                processFile(file, context, runRecord);
+            });
 
-            for (Path file : discoveredFiles) {
-                record.setCurrentFile(file.toAbsolutePath().toString());
-                processFile(file, record);
+            log.info("Discovery and processing complete for run {}: {} files scanned, {} skipped",
+                    runId, context.getFilesScanned(), context.getFilesSkipped());
+
+            Path reportPath = writeReport(context);
+            LocalDateTime endTime = LocalDateTime.now();
+
+            // FIX: don't mark a run COMPLETED if no report file was actually
+            // produced. Previously completeRun() was called unconditionally,
+            // so a run with a failed/null report path would still show up as
+            // "completed" in history with a download link that 404s because
+            // there's no file on disk to serve.
+            if (reportPath == null) {
+                log.error("Scan run {} finished processing but no report file was produced; marking run as failed", runId);
+                resultsHolder.failRun(runId, endTime);
+            } else {
+                resultsHolder.completeRun(runId, endTime, reportPath);
             }
 
-            Path reportPath = writeReport(record);
-
-            LocalDateTime endTime = LocalDateTime.now();
-            resultsHolder.completeRun(runId, endTime, reportPath);
-
             log.info("Scan run {} complete. Scanned: {}, Skipped: {}, Errors: {}, Findings: {}",
-                    runId, record.getFilesScanned(), record.getFilesSkipped(),
-                    record.getErrorsEncountered(), record.getFindings().size());
+                    runId, context.getFilesScanned(), context.getFilesSkipped(),
+                    context.getErrorsEncountered(), context.getFindings().size());
 
-            return new ScanSummary(startTime, endTime, record.getFilesScanned(),
-                    record.getFilesSkipped(), record.getErrorsEncountered(), record.getFindings());
-
+            return new ScanSummary(context.getStartTime(), endTime, context.getFilesScanned(),
+                    context.getFilesSkipped(), context.getErrorsEncountered(), context.getFindings());
         } catch (RuntimeException e) {
             log.error("Scan run {} failed: {}", runId, e.getMessage(), e);
             resultsHolder.failRun(runId, LocalDateTime.now());
@@ -108,37 +111,45 @@ public class ScanOrchestrator {
         }
     }
 
-    private void processFile(Path file, ScanRunRecord record) {
+    private void processFile(Path file, ScanContext context, ScanRunRecord runRecord) {
         String extension = getExtension(file);
 
         if (!appProperties.getSupportedExtensions().contains(extension.toLowerCase())) {
-            record.incrementFilesSkipped();
+            context.incrementFilesSkipped();
+            runRecord.incrementFilesSkipped();
             return;
         }
 
         TextExtractor extractor = extractorFactory.getExtractor(extension);
         if (extractor == null) {
-            record.incrementFilesSkipped();
+            context.incrementFilesSkipped();
+            runRecord.incrementFilesSkipped();
             return;
         }
 
         try {
             String extractedText = extractor.extractText(file);
-            detectAndRecordFindings(extractedText, file, record);
-            record.incrementFilesScanned();
+            detectAndRecordFindings(extractedText, file, context, runRecord);
+            context.incrementFilesScanned();
+            runRecord.incrementFilesScanned();
         } catch (IOException e) {
             log.warn("Failed to extract text from {}: {}", file, e.getMessage());
-            record.incrementErrorsEncountered();
+            context.incrementErrorsEncountered();
+            runRecord.incrementErrorsEncountered();
+        } catch (RuntimeException e) {
+            log.warn("Unexpected error extracting {}: {}", file, e.getMessage());
+            context.incrementErrorsEncountered();
+            runRecord.incrementErrorsEncountered();
         }
     }
 
-    private void detectAndRecordFindings(String extractedText, Path file, ScanRunRecord record) {
+    private void detectAndRecordFindings(String extractedText, Path file, ScanContext context, ScanRunRecord runRecord) {
         for (SensitiveDataDetector detector : detectorRegistry.getDetectors()) {
             List<String> candidates = detector.detectCandidates(extractedText);
 
             for (String candidate : candidates) {
                 if (isValid(candidate, detector.getType())) {
-                    recordFinding(candidate, detector.getType(), file, record);
+                    recordFinding(candidate, detector.getType(), file, context, runRecord);
                 }
             }
         }
@@ -148,11 +159,11 @@ public class ScanOrchestrator {
         return switch (type) {
             case CARD_NUMBER -> luhnValidator.isValid(candidate);
             case AADHAAR_NUMBER -> aadhaarValidator.isValid(candidate);
-            case PAN_NUMBER -> true; // regex format check in the detector IS the validation
+            case PAN_NUMBER -> true;
         };
     }
 
-    private void recordFinding(String candidate, SensitiveDataType type, Path file, ScanRunRecord record) {
+    private void recordFinding(String candidate, SensitiveDataType type, Path file, ScanContext context, ScanRunRecord runRecord) {
         String maskedValue = dataMasker.mask(candidate, type);
         RiskLevel riskLevel = riskClassifier.classify(type);
 
@@ -165,10 +176,11 @@ public class ScanOrchestrator {
                 LocalDateTime.now()
         );
 
-        record.addFinding(result);
+        context.addFinding(result);
+        runRecord.addFinding(result);
     }
 
-    private Path writeReport(ScanRunRecord record) {
+    private Path writeReport(ScanContext context) {
         String format = appProperties.getReport().getFormat();
         ReportGenerator generator = reportWriterFactory.getGenerator(format);
 
@@ -179,7 +191,7 @@ public class ScanOrchestrator {
 
         try {
             Path outputDirectory = Paths.get(appProperties.getReport().getOutputDirectory());
-            Path reportPath = generator.generateReport(record.getFindings(), outputDirectory);
+            Path reportPath = generator.generateReport(context.getFindings(), outputDirectory);
             log.info("Report written to {}", reportPath.toAbsolutePath());
             return reportPath;
         } catch (IOException e) {

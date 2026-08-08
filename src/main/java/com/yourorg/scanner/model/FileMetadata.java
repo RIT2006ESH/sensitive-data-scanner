@@ -2,10 +2,7 @@ package com.yourorg.scanner.model;
 
 import java.nio.file.Path;
 
-/**
- * Basic identifying information about a file being scanned.
- * Created once by the FileWalker and passed down through extraction and detection.
- */
+
 public class FileMetadata {
 
     private final String fileName;
