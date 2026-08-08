@@ -4,7 +4,8 @@ spring:
 
 scanner:
   target-drives:
-    - C:\Users\Asus\Desktop\test-scan-folder
+    - C:\
+    - D:\
 
   supported-extensions:
     - pdf
@@ -33,7 +34,6 @@ scanner:
     - C:\ProgramData\Intel
     - C:\ProgramData\McAfee
     - C:\ProgramData\Application Data
-    - C:\ProgramData\Desktop
     - C:\ProgramData\Documents
     - C:\ProgramData\Start Menu
     - C:\ProgramData\Templates
@@ -41,8 +41,27 @@ scanner:
     - C:\PerfLogs
     - C:\Recovery
     - C:\System Volume Information
+    - C:\Users\Asus\Desktop\sensitive-data-scanner\reports
 
-  schedule-cron: "*/10 * * * * *"
+  excluded-folder-names:
+    - node_modules
+    - .git
+    - .vscode
+    - .idea
+    - target
+    - build
+    - dist
+    - .gradle
+    - .m2
+    - venv
+    - .venv
+    - site-packages
+    - __pycache__
+    - .cache
+    - Google Cloud SDK
+    - AppData
+
+  schedule-cron: "0 0 */6 * * *"
 
   report:
     output-directory: reports
