@@ -18,14 +18,12 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-/**
- * REST API backing the single-page dashboard (static/index.html).
- * Exposes current scan status, live findings, run history, on-demand
- * trigger, and report download.
- */
 @RestController
 @RequestMapping("/api/scans")
 public class DashboardController {
+
+
+    private static final int LIVE_FINDINGS_LIMIT = 200;
 
     private final ScanResultsHolder resultsHolder;
     private final ScanOrchestrator scanOrchestrator;
@@ -45,7 +43,7 @@ public class DashboardController {
     @GetMapping("/current/findings")
     public ResponseEntity<List<ScanResult>> getCurrentFindings() {
         Optional<ScanRunRecord> run = resultsHolder.getCurrentRun().or(resultsHolder::getLatestRun);
-        return run.map(r -> ResponseEntity.ok(r.getFindings()))
+        return run.map(r -> ResponseEntity.ok(r.getRecentFindings(LIVE_FINDINGS_LIMIT)))
                 .orElse(ResponseEntity.ok(List.of()));
     }
 

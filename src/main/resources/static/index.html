@@ -3,34 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>Sensitive Data Scanner</title>
-<style>
-  body { font-family: Arial, sans-serif; margin: 0; padding: 24px; background: #f4f4f4; color: #222; }
-  h1 { font-size: 20px; margin: 0 0 16px; }
-  .status-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
-  .badge { padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: bold; color: #fff; }
-  .badge.running { background: #2b8a3e; }
-  .badge.idle { background: #868e96; }
-  .badge.failed { background: #c92a2a; }
-  .current-file { font-size: 13px; color: #555; }
-  .cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 24px; }
-  .card { background: #fff; border-radius: 8px; padding: 14px; border: 1px solid #ddd; }
-  .card .label { font-size: 12px; color: #777; margin-bottom: 4px; }
-  .card .value { font-size: 24px; font-weight: bold; }
-  .card.critical .value { color: #c92a2a; }
-  .card.medium .value { color: #e8590c; }
-  .card.normal .value { color: #2f9e44; }
-  table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #ddd; margin-bottom: 24px; }
-  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #eee; font-size: 13px; }
-  th { background: #fafafa; }
-  .risk-CRITICAL { color: #c92a2a; font-weight: bold; }
-  .risk-MEDIUM { color: #e8590c; font-weight: bold; }
-  .risk-NORMAL { color: #2f9e44; font-weight: bold; }
-  button { padding: 8px 16px; border-radius: 6px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
-  button:hover { background: #f0f0f0; }
-  .actions { display: flex; gap: 10px; margin-bottom: 20px; }
-  .history-row { cursor: default; }
-  #history-body a { color: #1971c2; text-decoration: none; }
-</style>
+<link rel="stylesheet" href="/style.css">
 </head>
 <body>
   <h1>Sensitive Data Scanner Dashboard</h1>
@@ -42,7 +15,7 @@
 
   <div class="actions">
     <button onclick="triggerScan()">Run scan now</button>
-    <button onclick="downloadLatest()">Download latest report</button>
+    <button id="download-btn" onclick="downloadLatest()" disabled>Download latest report</button>
   </div>
 
   <div class="cards">
@@ -69,103 +42,6 @@
     <tbody id="history-body"></tbody>
   </table>
 
-<script>
-let latestRunId = null;
-
-async function pollCurrent() {
-  try {
-    const res = await fetch('/api/scans/current');
-    if (res.status === 204) {
-      setBadge('idle', 'IDLE');
-      return;
-    }
-    const data = await res.json();
-    latestRunId = data.runId;
-
-    if (data.status === 'RUNNING') {
-      setBadge('running', 'RUNNING');
-      document.getElementById('current-file').textContent = data.currentFile ? ('Scanning: ' + data.currentFile) : '';
-    } else if (data.status === 'FAILED') {
-      setBadge('failed', 'FAILED');
-      document.getElementById('current-file').textContent = '';
-    } else {
-      setBadge('idle', 'IDLE');
-      document.getElementById('current-file').textContent = '';
-    }
-
-    document.getElementById('count-critical').textContent = data.criticalCount;
-    document.getElementById('count-medium').textContent = data.mediumCount;
-    document.getElementById('count-normal').textContent = data.normalCount;
-    document.getElementById('count-scanned').textContent = data.filesScanned;
-    document.getElementById('count-skipped').textContent = data.filesSkipped;
-  } catch (e) {
-    console.error('Failed to poll current run', e);
-  }
-}
-
-function setBadge(cls, text) {
-  const badge = document.getElementById('status-badge');
-  badge.className = 'badge ' + cls;
-  badge.textContent = text;
-}
-
-async function pollFindings() {
-  try {
-    const res = await fetch('/api/scans/current/findings');
-    const findings = await res.json();
-    const body = document.getElementById('findings-body');
-    body.innerHTML = '';
-    findings.slice().reverse().forEach(f => {
-      const row = document.createElement('tr');
-      row.innerHTML = `<td>${f.fileName}</td><td>${f.filePath}</td><td>${f.dataType}</td>` +
-        `<td class="risk-${f.riskLevel}">${f.riskLevel}</td><td>${f.maskedValue}</td><td>${f.scanTimestamp}</td>`;
-      body.appendChild(row);
-    });
-  } catch (e) {
-    console.error('Failed to poll findings', e);
-  }
-}
-
-async function pollHistory() {
-  try {
-    const res = await fetch('/api/scans/history');
-    const runs = await res.json();
-    const body = document.getElementById('history-body');
-    body.innerHTML = '';
-    runs.forEach(r => {
-      const row = document.createElement('tr');
-      const downloadCell = r.status === 'COMPLETED'
-        ? `<a href="/api/scans/${r.runId}/download">Download</a>`
-        : '-';
-      row.innerHTML = `<td>${r.runId.substring(0, 8)}</td><td>${r.status}</td><td>${r.startTime}</td>` +
-        `<td>${r.criticalCount}</td><td>${r.mediumCount}</td><td>${r.normalCount}</td><td>${downloadCell}</td>`;
-      body.appendChild(row);
-    });
-  } catch (e) {
-    console.error('Failed to poll history', e);
-  }
-}
-
-function triggerScan() {
-  fetch('/api/scans/trigger', { method: 'POST' })
-    .then(r => r.text())
-    .then(msg => console.log(msg));
-}
-
-function downloadLatest() {
-  if (latestRunId) {
-    window.location.href = '/api/scans/' + latestRunId + '/download';
-  }
-}
-
-function pollAll() {
-  pollCurrent();
-  pollFindings();
-  pollHistory();
-}
-
-pollAll();
-setInterval(pollAll, 2000);
-</script>
+  <script src="/dashboard.js"></script>
 </body>
 </html>
