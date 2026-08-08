@@ -7,11 +7,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-/**
- * Triggers a full scan on the cron schedule configured in
- * scanner.schedule-cron (application.yml). Delegates all actual work to
- * the ScanOrchestrator — this class's only job is "when", not "how".
- */
+
 @Component
 public class ScanScheduler {
 
