@@ -6,11 +6,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.Map;
 
-/**
- * Maps each SensitiveDataType to a business-defined risk level.
- * Centralized here so the risk mapping can change (or grow, for future
- * data types) without touching detectors, the orchestrator, or reports.
- */
+
 @Component
 public class RiskClassifier {
 

@@ -2,19 +2,9 @@ package com.yourorg.scanner.validator;
 
 import org.springframework.stereotype.Component;
 
-/**
- * Validates card numbers using the Luhn (mod-10) checksum algorithm.
- * This is the standard check used by Visa, Mastercard, Amex, etc. to
- * catch typos/random digit sequences before they're even sent to a bank.
- */
 @Component
 public class LuhnValidator {
 
-    /**
-     * @param rawCandidate the candidate string as found by the detector
-     *                     (may contain spaces/hyphens)
-     * @return true if the digits form a Luhn-valid number
-     */
     public boolean isValid(String rawCandidate) {
         String digitsOnly = stripNonDigits(rawCandidate);
 

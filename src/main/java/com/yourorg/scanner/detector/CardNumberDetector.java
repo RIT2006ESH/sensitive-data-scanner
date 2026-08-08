@@ -8,16 +8,13 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Finds candidate credit/debit card numbers: 13-19 digits, optionally
- * grouped with spaces or hyphens. Luhn validation happens later, in the
- * validator layer — this class only does pattern matching.
- */
+
 @Component
 public class CardNumberDetector implements SensitiveDataDetector {
 
-    private static final Pattern CARD_PATTERN =
-            Pattern.compile("\\b(?:\\d[ -]?){12,18}\\d\\b");
+    private static final Pattern CARD_PATTERN = Pattern.compile(
+            "\\b(?:\\d{13,19}|\\d{4}[ -]\\d{4}[ -]\\d{4}[ -]\\d{1,7})\\b"
+    );
 
     @Override
     public SensitiveDataType getType() {
