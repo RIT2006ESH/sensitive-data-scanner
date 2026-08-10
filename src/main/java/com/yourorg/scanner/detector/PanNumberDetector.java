@@ -8,10 +8,7 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Finds candidate PAN numbers matching the standard Indian Income Tax
- * Department format: 5 letters, 4 digits, 1 letter (e.g. AAAAA9999A).
- */
+
 @Component
 public class PanNumberDetector implements SensitiveDataDetector {
 
