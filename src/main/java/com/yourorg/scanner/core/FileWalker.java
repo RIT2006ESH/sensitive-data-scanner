@@ -15,12 +15,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.List;
 import java.util.function.Consumer;
 
-/**
- * Walks configured target drives and streams each discovered file to a
- * callback as soon as it's found, rather than collecting a full list
- * first. This lets processing (and any live progress reporting) start
- * immediately instead of waiting for an entire drive to be enumerated.
- */
+
 @Component
 public class FileWalker {
 
