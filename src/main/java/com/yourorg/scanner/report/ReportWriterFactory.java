@@ -4,10 +4,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.Map;
 
-/**
- * Picks the correct ReportGenerator based on the configured report format
- * (scanner.report.format in application.yml — "csv" or "excel").
- */
+
 @Component
 public class ReportWriterFactory {
 
@@ -20,10 +17,7 @@ public class ReportWriterFactory {
         );
     }
 
-    /**
-     * @param format "csv" or "excel" (case-insensitive)
-     * @return the matching generator, or null if the format is unsupported
-     */
+
     public ReportGenerator getGenerator(String format) {
         if (format == null) {
             return null;
