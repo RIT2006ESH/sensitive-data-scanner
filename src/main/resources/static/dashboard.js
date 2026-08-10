@@ -1,0 +1,104 @@
+let latestRunId = null;
+let latestStatus = null;
+
+async function pollCurrent() {
+  try {
+    const res = await fetch('/api/scans/current');
+    const downloadBtn = document.getElementById('download-btn');
+
+    if (res.status === 204) {
+      setBadge('idle', 'IDLE');
+      latestStatus = null;
+      downloadBtn.disabled = true;
+      return;
+    }
+    const data = await res.json();
+    latestRunId = data.runId;
+    latestStatus = data.status;
+
+    if (data.status === 'RUNNING') {
+      setBadge('running', 'RUNNING');
+      document.getElementById('current-file').textContent = data.currentFile ? ('Scanning: ' + data.currentFile) : '';
+    } else if (data.status === 'FAILED') {
+      setBadge('failed', 'FAILED');
+      document.getElementById('current-file').textContent = '';
+    } else {
+      setBadge('idle', 'IDLE');
+      document.getElementById('current-file').textContent = '';
+    }
+
+    downloadBtn.disabled = (data.status !== 'COMPLETED');
+
+    document.getElementById('count-critical').textContent = data.criticalCount;
+    document.getElementById('count-medium').textContent = data.mediumCount;
+    document.getElementById('count-normal').textContent = data.normalCount;
+    document.getElementById('count-scanned').textContent = data.filesScanned;
+    document.getElementById('count-skipped').textContent = data.filesSkipped;
+  } catch (e) {
+    console.error('Failed to poll current run', e);
+  }
+}
+
+function setBadge(cls, text) {
+  const badge = document.getElementById('status-badge');
+  badge.className = 'badge ' + cls;
+  badge.textContent = text;
+}
+
+async function pollFindings() {
+  try {
+    const res = await fetch('/api/scans/current/findings');
+    const findings = await res.json();
+    const body = document.getElementById('findings-body');
+    body.innerHTML = '';
+    findings.slice().reverse().forEach(f => {
+      const row = document.createElement('tr');
+      row.innerHTML = `<td>${f.fileName}</td><td>${f.filePath}</td><td>${f.dataType}</td>` +
+        `<td class="risk-${f.riskLevel}">${f.riskLevel}</td><td>${f.maskedValue}</td><td>${f.scanTimestamp}</td>`;
+      body.appendChild(row);
+    });
+  } catch (e) {
+    console.error('Failed to poll findings', e);
+  }
+}
+
+async function pollHistory() {
+  try {
+    const res = await fetch('/api/scans/history');
+    const runs = await res.json();
+    const body = document.getElementById('history-body');
+    body.innerHTML = '';
+    runs.forEach(r => {
+      const row = document.createElement('tr');
+      const downloadCell = r.status === 'COMPLETED'
+        ? `<a href="/api/scans/${r.runId}/download">Download</a>`
+        : (r.status === 'RUNNING' ? 'In progress...' : '-');
+      row.innerHTML = `<td>${r.runId.substring(0, 8)}</td><td>${r.status}</td><td>${r.startTime}</td>` +
+        `<td>${r.criticalCount}</td><td>${r.mediumCount}</td><td>${r.normalCount}</td><td>${downloadCell}</td>`;
+      body.appendChild(row);
+    });
+  } catch (e) {
+    console.error('Failed to poll history', e);
+  }
+}
+
+function triggerScan() {
+  fetch('/api/scans/trigger', { method: 'POST' })
+    .then(r => r.text())
+    .then(msg => console.log(msg));
+}
+
+function downloadLatest() {
+  if (latestRunId && latestStatus === 'COMPLETED') {
+    window.location.href = '/api/scans/' + latestRunId + '/download';
+  }
+}
+
+function pollAll() {
+  pollCurrent();
+  pollFindings();
+  pollHistory();
+}
+
+pollAll();
+setInterval(pollAll, 2000);

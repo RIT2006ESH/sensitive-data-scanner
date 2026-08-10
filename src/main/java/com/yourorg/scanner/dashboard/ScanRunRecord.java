@@ -9,16 +9,7 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
-/**
- * Live/historical view of a single scan run, tracked in memory for the
- * web dashboard. Mutated in place while RUNNING, then frozen once
- * COMPLETED/FAILED.
- *
- * A record can also be "restored" from the on-disk history manifest after
- * an app restart -- in that case there are no individual ScanResult rows
- * (those aren't persisted), so risk counts come from the manifest instead
- * of being counted from the (empty) findings list.
- */
+
 public class ScanRunRecord {
 
     private final String runId;
@@ -52,11 +43,7 @@ public class ScanRunRecord {
         this.restoredNormal = restoredNormal;
     }
 
-    /**
-     * Rebuilds a completed/failed run's summary from the persisted history
-     * manifest after an app restart. No per-file findings are available for
-     * a restored run -- only the aggregate counts recorded at the time.
-     */
+
     public static ScanRunRecord restored(String runId, ScanRunStatus status, LocalDateTime startTime,
                                          LocalDateTime endTime, int filesScanned, int filesSkipped,
                                          int errorsEncountered, long critical, long medium, long normal,
@@ -115,11 +102,7 @@ public class ScanRunRecord {
         return findings.stream().filter(f -> f.getRiskLevel() == level).count();
     }
 
-    /**
-     * Most recent {@code limit} findings, not the full list -- keeps the
-     * dashboard's polling payload small on large scans. Empty for a
-     * restored run, since per-file detail isn't persisted.
-     */
+
     public List<ScanResult> getRecentFindings(int limit) {
         int size = findings.size();
         if (size <= limit) {
