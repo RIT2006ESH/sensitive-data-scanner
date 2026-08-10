@@ -8,11 +8,7 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Finds candidate Aadhaar numbers: 12 digits, optionally grouped in
- * blocks of 4 with spaces or hyphens. Verhoeff checksum validation
- * happens later, in the validator layer.
- */
+
 @Component
 public class AadhaarDetector implements SensitiveDataDetector {
 

@@ -2,12 +2,7 @@ package com.yourorg.scanner.validator;
 
 import org.springframework.stereotype.Component;
 
-/**
- * Validates Aadhaar-shaped 12-digit numbers using the Verhoeff checksum
- * algorithm — the same check digit scheme UIDAI uses for Aadhaar numbers.
- * Unlike Luhn, Verhoeff catches all single-digit errors AND all
- * adjacent-transposition errors, which is why UIDAI chose it.
- */
+
 @Component
 public class AadhaarChecksumValidator {
 
@@ -37,11 +32,7 @@ public class AadhaarChecksumValidator {
             {7, 0, 4, 6, 9, 1, 3, 2, 5, 8}
     };
 
-    /**
-     * @param rawCandidate the candidate string as found by the detector
-     *                     (may contain spaces/hyphens)
-     * @return true if the 12 digits pass the Verhoeff checksum
-     */
+
     public boolean isValid(String rawCandidate) {
         String digitsOnly = stripNonDigits(rawCandidate);
 
