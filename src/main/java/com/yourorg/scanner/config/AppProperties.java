@@ -9,27 +9,15 @@ import java.util.List;
 @ConfigurationProperties(prefix = "scanner")
 public class AppProperties {
 
-    /** Drives/root folders to scan recursively, e.g. C:\, D:\ */
     private List<String> targetDrives;
 
-    /** File extensions eligible for extraction, e.g. pdf, docx, xlsx, txt, csv */
     private List<String> supportedExtensions;
 
-    /** Absolute folder paths to skip entirely during the scan */
     private List<String> excludedPaths;
 
-    /**
-     * Folder NAMES to skip wherever they appear in the tree, regardless of
-     * full path -- e.g. "node_modules" matches every node_modules folder
-     * across every project on the drive, not just one fixed location.
-     * Matching is case-insensitive.
-     */
+
     private List<String> excludedFolderNames;
-
-    /** Cron expression controlling how often the scan runs */
     private String scheduleCron;
-
-    /** Report output settings */
     private Report report = new Report();
 
     public static class Report {
