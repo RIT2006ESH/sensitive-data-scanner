@@ -53,8 +53,11 @@ async function pollFindings() {
     body.innerHTML = '';
     findings.slice().reverse().forEach(f => {
       const row = document.createElement('tr');
+      const created = f.fileCreationTime ? f.fileCreationTime : '-';
+      const modified = f.fileModifiedTime ? f.fileModifiedTime : '-';
       row.innerHTML = `<td>${f.fileName}</td><td>${f.filePath}</td><td>${f.dataType}</td>` +
-        `<td class="risk-${f.riskLevel}">${f.riskLevel}</td><td>${f.maskedValue}</td><td>${f.scanTimestamp}</td>`;
+        `<td class="risk-${f.riskLevel}">${f.riskLevel}</td><td>${f.maskedValue}</td>` +
+        `<td>${f.scanTimestamp}</td><td>${created}</td><td>${modified}</td>`;
       body.appendChild(row);
     });
   } catch (e) {
