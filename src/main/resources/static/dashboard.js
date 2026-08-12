@@ -86,9 +86,21 @@ async function pollHistory() {
 }
 
 function triggerScan() {
-  fetch('/api/scans/trigger', { method: 'POST' })
-    .then(r => r.text())
-    .then(msg => console.log(msg));
+  const pathValue = document.getElementById('scan-path-input').value.trim();
+  const body = pathValue ? JSON.stringify({ paths: [pathValue] }) : null;
+
+  fetch('/api/scans/trigger', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: body
+  })
+    .then(async r => {
+      const msg = await r.text();
+      if (!r.ok) {
+        alert(msg);
+      }
+      console.log(msg);
+    });
 }
 
 function downloadLatest() {
