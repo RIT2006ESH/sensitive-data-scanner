@@ -10,10 +10,13 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -21,9 +24,6 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/scans")
 public class DashboardController {
-
-
-    private static final int LIVE_FINDINGS_LIMIT = 200;
 
     private final ScanResultsHolder resultsHolder;
     private final ScanOrchestrator scanOrchestrator;
@@ -43,7 +43,7 @@ public class DashboardController {
     @GetMapping("/current/findings")
     public ResponseEntity<List<ScanResult>> getCurrentFindings() {
         Optional<ScanRunRecord> run = resultsHolder.getCurrentRun().or(resultsHolder::getLatestRun);
-        return run.map(r -> ResponseEntity.ok(r.getRecentFindings(LIVE_FINDINGS_LIMIT)))
+        return run.map(r -> ResponseEntity.ok(r.getRecentFindings(200)))
                 .orElse(ResponseEntity.ok(List.of()));
     }
 
@@ -73,12 +73,30 @@ public class DashboardController {
                 .body(resource);
     }
 
+    /**
+     * Triggers a scan. With no body (or an empty "paths" list), scans the
+     * configured target-drives. With a non-empty "paths" list, scans only
+     * those paths instead -- each must exist or the request is rejected.
+     */
     @PostMapping("/trigger")
-    public ResponseEntity<String> triggerScan() {
+    public ResponseEntity<String> triggerScan(@RequestBody(required = false) ScanTriggerRequest request) {
         if (resultsHolder.isScanRunning()) {
             return ResponseEntity.status(409).body("A scan is already running.");
         }
-        new Thread(scanOrchestrator::runScan, "manual-scan-trigger").start();
+
+        List<String> paths = (request != null) ? request.paths() : null;
+
+        if (paths != null && !paths.isEmpty()) {
+            List<String> invalid = paths.stream()
+                    .filter(p -> !Files.exists(Paths.get(p)))
+                    .collect(Collectors.toList());
+            if (!invalid.isEmpty()) {
+                return ResponseEntity.badRequest()
+                        .body("Path(s) do not exist: " + String.join(", ", invalid));
+            }
+        }
+
+        new Thread(() -> scanOrchestrator.runScan(paths), "manual-scan-trigger").start();
         return ResponseEntity.accepted().body("Scan started.");
     }
 }
