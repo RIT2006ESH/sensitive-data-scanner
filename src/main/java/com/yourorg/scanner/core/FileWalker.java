@@ -15,7 +15,15 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.List;
 import java.util.function.Consumer;
 
-
+/**
+ * Walks target drives/folders and streams each discovered file to a
+ * callback as soon as it's found, rather than collecting a full list
+ * first. This lets processing (and any live progress reporting) start
+ * immediately instead of waiting for an entire tree to be enumerated.
+ *
+ * Excluded paths/folder-names from AppProperties always apply, regardless
+ * of whether the walk targets the configured drives or an ad-hoc override.
+ */
 @Component
 public class FileWalker {
 
@@ -27,12 +35,18 @@ public class FileWalker {
         this.appProperties = appProperties;
     }
 
+    /** Walks the drives configured in application.yml (scanner.target-drives). */
     public void walk(Consumer<Path> fileHandler) {
-        for (String drive : appProperties.getTargetDrives()) {
-            Path rootPath = Paths.get(drive);
+        walk(appProperties.getTargetDrives(), fileHandler);
+    }
+
+    /** Walks the given target paths instead of the configured drives. */
+    public void walk(List<String> targetPaths, Consumer<Path> fileHandler) {
+        for (String target : targetPaths) {
+            Path rootPath = Paths.get(target);
 
             if (!Files.exists(rootPath)) {
-                log.warn("Configured target drive does not exist, skipping: {}", drive);
+                log.warn("Configured target path does not exist, skipping: {}", target);
                 continue;
             }
 
