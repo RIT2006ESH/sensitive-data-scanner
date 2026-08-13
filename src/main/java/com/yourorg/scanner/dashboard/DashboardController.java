@@ -2,6 +2,7 @@ package com.yourorg.scanner.dashboard;
 
 import com.yourorg.scanner.core.ScanOrchestrator;
 import com.yourorg.scanner.model.ScanResult;
+import com.yourorg.scanner.model.SensitiveDataType;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
@@ -17,8 +18,12 @@ import org.springframework.web.bind.annotation.RestController;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @RestController
@@ -54,6 +59,14 @@ public class DashboardController {
                 .collect(Collectors.toList());
     }
 
+    /** Lets the frontend populate the data-type dropdown without hardcoding values. */
+    @GetMapping("/data-types")
+    public List<String> getAvailableDataTypes() {
+        return Arrays.stream(SensitiveDataType.values())
+                .map(Enum::name)
+                .collect(Collectors.toList());
+    }
+
     @GetMapping("/{runId}/download")
     public ResponseEntity<Resource> downloadReport(@PathVariable String runId) {
         Optional<ScanRunRecord> runOpt = resultsHolder.getRun(runId);
@@ -74,9 +87,9 @@ public class DashboardController {
     }
 
     /**
-     * Triggers a scan. With no body (or an empty "paths" list), scans the
-     * configured target-drives. With a non-empty "paths" list, scans only
-     * those paths instead -- each must exist or the request is rejected.
+     * Triggers a scan. With no body, scans configured target-drives for all
+     * supported data types. "paths" and "dataTypes" in the body each narrow
+     * that scope independently -- either, both, or neither may be provided.
      */
     @PostMapping("/trigger")
     public ResponseEntity<String> triggerScan(@RequestBody(required = false) ScanTriggerRequest request) {
@@ -85,6 +98,7 @@ public class DashboardController {
         }
 
         List<String> paths = (request != null) ? request.paths() : null;
+        List<String> dataTypeNames = (request != null) ? request.dataTypes() : null;
 
         if (paths != null && !paths.isEmpty()) {
             List<String> invalid = paths.stream()
@@ -96,7 +110,28 @@ public class DashboardController {
             }
         }
 
-        new Thread(() -> scanOrchestrator.runScan(paths), "manual-scan-trigger").start();
+        Set<SensitiveDataType> enabledTypes = null;
+        if (dataTypeNames != null && !dataTypeNames.isEmpty()) {
+            enabledTypes = EnumSet.noneOf(SensitiveDataType.class);
+            List<String> invalidTypes = new ArrayList<>();
+            for (String name : dataTypeNames) {
+                try {
+                    enabledTypes.add(SensitiveDataType.valueOf(name));
+                } catch (IllegalArgumentException e) {
+                    invalidTypes.add(name);
+                }
+            }
+            if (!invalidTypes.isEmpty()) {
+                String validOptions = Arrays.stream(SensitiveDataType.values())
+                        .map(Enum::name).collect(Collectors.joining(", "));
+                return ResponseEntity.badRequest().body(
+                        "Invalid data type(s): " + String.join(", ", invalidTypes) +
+                                ". Valid options: " + validOptions);
+            }
+        }
+
+        Set<SensitiveDataType> finalEnabledTypes = enabledTypes;
+        new Thread(() -> scanOrchestrator.runScan(paths, finalEnabledTypes), "manual-scan-trigger").start();
         return ResponseEntity.accepted().body("Scan started.");
     }
 }
