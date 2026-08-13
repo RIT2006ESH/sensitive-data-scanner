@@ -1,6 +1,23 @@
 let latestRunId = null;
 let latestStatus = null;
 
+async function loadDataTypes() {
+  try {
+    const res = await fetch('/api/scans/data-types');
+    const types = await res.json();
+    const select = document.getElementById('pii-type-select');
+    select.innerHTML = '';
+    types.forEach(t => {
+      const option = document.createElement('option');
+      option.value = t;
+      option.textContent = t;
+      select.appendChild(option);
+    });
+  } catch (e) {
+    console.error('Failed to load data types', e);
+  }
+}
+
 async function pollCurrent() {
   try {
     const res = await fetch('/api/scans/current');
@@ -87,12 +104,19 @@ async function pollHistory() {
 
 function triggerScan() {
   const pathValue = document.getElementById('scan-path-input').value.trim();
-  const body = pathValue ? JSON.stringify({ paths: [pathValue] }) : null;
+  const selectedTypes = Array.from(document.getElementById('pii-type-select').selectedOptions)
+    .map(opt => opt.value);
+
+  const payload = {};
+  if (pathValue) payload.paths = [pathValue];
+  if (selectedTypes.length > 0) payload.dataTypes = selectedTypes;
+
+  const hasBody = Object.keys(payload).length > 0;
 
   fetch('/api/scans/trigger', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: body
+    headers: hasBody ? { 'Content-Type': 'application/json' } : {},
+    body: hasBody ? JSON.stringify(payload) : null
   })
     .then(async r => {
       const msg = await r.text();
@@ -115,5 +139,6 @@ function pollAll() {
   pollHistory();
 }
 
+loadDataTypes();
 pollAll();
 setInterval(pollAll, 2000);
