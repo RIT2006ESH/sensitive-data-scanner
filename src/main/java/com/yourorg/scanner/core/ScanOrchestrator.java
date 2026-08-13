@@ -30,6 +30,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -71,28 +72,34 @@ public class ScanOrchestrator {
         this.resultsHolder = resultsHolder;
     }
 
-    /** Scans the drives configured in application.yml (scanner.target-drives). */
+    /** Scans the configured target-drives for all supported data types. */
     public ScanSummary runScan() {
-        return runScan(null);
+        return runScan(null, null);
+    }
+
+    /** Scans the given target paths (or configured drives if null/empty) for all supported data types. */
+    public ScanSummary runScan(List<String> targetPaths) {
+        return runScan(targetPaths, null);
     }
 
     /**
-     * Scans the given target paths instead of the configured drives.
-     * Pass null or an empty list to fall back to the configured drives.
+     * Scans the given target paths (or configured drives if null/empty), detecting
+     * only the given data types (or all supported types if null/empty).
      */
-    public ScanSummary runScan(List<String> targetPaths) {
+    public ScanSummary runScan(List<String> targetPaths, Set<SensitiveDataType> enabledTypes) {
         String runId = UUID.randomUUID().toString();
         LocalDateTime startTime = LocalDateTime.now();
         ScanContext context = new ScanContext(runId, startTime);
         ScanRunRecord runRecord = resultsHolder.startRun(runId, startTime);
 
-        log.info("Starting scan run {}{}", runId,
-                (targetPaths == null || targetPaths.isEmpty()) ? "" : " (custom paths: " + targetPaths + ")");
+        log.info("Starting scan run {}{}{}", runId,
+                (targetPaths == null || targetPaths.isEmpty()) ? "" : " (custom paths: " + targetPaths + ")",
+                (enabledTypes == null || enabledTypes.isEmpty()) ? "" : " (types: " + enabledTypes + ")");
 
         try {
             Consumer<Path> fileHandler = file -> {
                 runRecord.setCurrentFile(file.toString());
-                processFile(file, context, runRecord);
+                processFile(file, context, runRecord, enabledTypes);
             };
 
             if (targetPaths == null || targetPaths.isEmpty()) {
@@ -122,7 +129,7 @@ public class ScanOrchestrator {
         }
     }
 
-    private void processFile(Path file, ScanContext context, ScanRunRecord runRecord) {
+    private void processFile(Path file, ScanContext context, ScanRunRecord runRecord, Set<SensitiveDataType> enabledTypes) {
         String extension = getExtension(file);
 
         if (!appProperties.getSupportedExtensions().contains(extension.toLowerCase())) {
@@ -140,7 +147,7 @@ public class ScanOrchestrator {
 
         try {
             String extractedText = extractor.extractText(file);
-            detectAndRecordFindings(extractedText, file, context, runRecord);
+            detectAndRecordFindings(extractedText, file, context, runRecord, enabledTypes);
             context.incrementFilesScanned();
             runRecord.incrementFilesScanned();
         } catch (IOException e) {
@@ -154,8 +161,13 @@ public class ScanOrchestrator {
         }
     }
 
-    private void detectAndRecordFindings(String extractedText, Path file, ScanContext context, ScanRunRecord runRecord) {
+    private void detectAndRecordFindings(String extractedText, Path file, ScanContext context,
+                                         ScanRunRecord runRecord, Set<SensitiveDataType> enabledTypes) {
         for (SensitiveDataDetector detector : detectorRegistry.getDetectors()) {
+            if (enabledTypes != null && !enabledTypes.isEmpty() && !enabledTypes.contains(detector.getType())) {
+                continue;
+            }
+
             List<String> candidates = detector.detectCandidates(extractedText);
 
             for (String candidate : candidates) {
