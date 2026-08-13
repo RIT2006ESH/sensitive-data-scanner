@@ -15,6 +15,8 @@
 
   <div class="actions">
     <input type="text" id="scan-path-input" placeholder="Optional: specific file/folder path (leave blank for full configured scan)" style="flex:1; padding:8px; border-radius:6px; border:1px solid #ccc;">
+    <select id="pii-type-select" multiple size="3" style="padding:8px; border-radius:6px; border:1px solid #ccc;" title="Ctrl/Cmd-click to select multiple. Leave nothing selected to detect all types.">
+    </select>
     <button onclick="triggerScan()">Run scan now</button>
     <button id="download-btn" onclick="downloadLatest()" disabled>Download latest report</button>
   </div>
