@@ -3,10 +3,7 @@ package com.yourorg.scanner.model;
 import java.time.LocalDateTime;
 import java.util.List;
 
-/**
- * Aggregate statistics for one complete scan run — printed to the log
- * and optionally included at the top of the report.
- */
+
 public class ScanSummary {
 
     private final LocalDateTime startTime;
