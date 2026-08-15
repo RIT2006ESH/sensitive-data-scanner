@@ -17,8 +17,10 @@ public class DataMasker {
         }
 
         return switch (type) {
-            case CARD_NUMBER, AADHAAR_NUMBER -> maskKeepingLastFour(rawValue);
+            case CARD_NUMBER, AADHAAR_NUMBER, BANK_ACCOUNT, PHONE_NUMBER,
+                 PASSPORT, DRIVING_LICENCE, VOTER_ID, IFSC -> maskKeepingLastFour(rawValue);
             case PAN_NUMBER -> maskPan(rawValue);
+            case UPI_ID, EMAIL -> maskEmailLike(rawValue);
         };
     }
 
@@ -54,5 +56,23 @@ public class DataMasker {
             return MASK_CHAR.repeat(rawValue.length());
         }
         return MASK_CHAR + rawValue.substring(5, 9) + MASK_CHAR;
+    }
+
+
+    /** For email-shaped values (email addresses, UPI IDs): mask the local part, keep the domain/handle visible. */
+    private String maskEmailLike(String rawValue) {
+        int atIndex = rawValue.indexOf('@');
+        if (atIndex <= 0) {
+            return MASK_CHAR.repeat(rawValue.length());
+        }
+
+        String localPart = rawValue.substring(0, atIndex);
+        String domainPart = rawValue.substring(atIndex);
+
+        String maskedLocal = localPart.length() <= 2
+                ? MASK_CHAR.repeat(localPart.length())
+                : localPart.charAt(0) + MASK_CHAR.repeat(localPart.length() - 2) + localPart.charAt(localPart.length() - 1);
+
+        return maskedLocal + domainPart;
     }
 }
