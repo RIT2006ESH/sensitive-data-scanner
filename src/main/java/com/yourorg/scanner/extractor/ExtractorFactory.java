@@ -4,11 +4,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.Map;
 
-/**
- * Picks the correct TextExtractor implementation based on a file's extension.
- * Adding support for a new format later means adding one new extractor class
- * and one new entry in the map below — nothing else changes.
- */
+
 @Component
 public class ExtractorFactory {
 
