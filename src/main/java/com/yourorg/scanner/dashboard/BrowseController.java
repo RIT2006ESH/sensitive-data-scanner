@@ -15,13 +15,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
-/**
- * Backs the dashboard's Browse button. A browser's native file/folder
- * picker can never expose the true absolute server-side path (browsers
- * deliberately withhold it for privacy/fingerprinting reasons), so this
- * lets the frontend navigate the real server filesystem instead.
- * Read-only: lists directory names only, never file contents.
- */
+
 @RestController
 @RequestMapping("/api/scans")
 public class BrowseController {
