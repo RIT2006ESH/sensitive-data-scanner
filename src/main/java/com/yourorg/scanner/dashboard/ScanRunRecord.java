@@ -15,6 +15,7 @@ public class ScanRunRecord {
 
     private final String runId;
     private final LocalDateTime startTime;
+    private final String scanPath;
     private final List<ScanResult> findings = Collections.synchronizedList(new ArrayList<>());
     private final AtomicInteger filesScanned = new AtomicInteger(0);
     private final AtomicInteger filesSkipped = new AtomicInteger(0);
@@ -30,14 +31,15 @@ public class ScanRunRecord {
     private final long restoredMedium;
     private final long restoredNormal;
 
-    public ScanRunRecord(String runId, LocalDateTime startTime) {
-        this(runId, startTime, false, 0, 0, 0);
+    public ScanRunRecord(String runId, LocalDateTime startTime, String scanPath) {
+        this(runId, startTime, scanPath, false, 0, 0, 0);
     }
 
-    private ScanRunRecord(String runId, LocalDateTime startTime, boolean restored,
+    private ScanRunRecord(String runId, LocalDateTime startTime, String scanPath, boolean restored,
                           long restoredCritical, long restoredMedium, long restoredNormal) {
         this.runId = runId;
         this.startTime = startTime;
+        this.scanPath = scanPath;
         this.restored = restored;
         this.restoredCritical = restoredCritical;
         this.restoredMedium = restoredMedium;
@@ -45,10 +47,10 @@ public class ScanRunRecord {
     }
 
     public static ScanRunRecord restored(String runId, ScanRunStatus status, LocalDateTime startTime,
-                                         LocalDateTime endTime, int filesScanned, int filesSkipped,
+                                         LocalDateTime endTime, String scanPath, int filesScanned, int filesSkipped,
                                          int errorsEncountered, long critical, long medium, long normal,
                                          Path reportPath) {
-        ScanRunRecord record = new ScanRunRecord(runId, startTime, true, critical, medium, normal);
+        ScanRunRecord record = new ScanRunRecord(runId, startTime, scanPath, true, critical, medium, normal);
         record.filesScanned.set(filesScanned);
         record.filesSkipped.set(filesSkipped);
         record.errorsEncountered.set(errorsEncountered);
@@ -104,6 +106,7 @@ public class ScanRunRecord {
 
     public boolean isRestored() { return restored; }
     public String getRunId() { return runId; }
+    public String getScanPath() { return scanPath; }
     public ScanRunStatus getStatus() { return status; }
     public LocalDateTime getStartTime() { return startTime; }
     public LocalDateTime getEndTime() { return endTime; }
