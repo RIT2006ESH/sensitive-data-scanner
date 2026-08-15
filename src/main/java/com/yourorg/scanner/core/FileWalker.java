@@ -6,13 +6,16 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.nio.file.FileVisitOption;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Consumer;
 
 @Component
@@ -26,13 +29,20 @@ public class FileWalker {
         this.appProperties = appProperties;
     }
 
-    /** Walks the drives configured in application.yml (scanner.target-drives). */
+    /** Walks the drives configured in application.yml (scanner.target-drives) with default options. */
     public void walk(Consumer<Path> fileHandler) {
-        walk(appProperties.getTargetDrives(), fileHandler);
+        walk(appProperties.getTargetDrives(), ScanOptions.defaults(), fileHandler);
     }
 
-    /** Walks the given target paths instead of the configured drives. */
+    /** Walks the given target paths with default options. */
     public void walk(List<String> targetPaths, Consumer<Path> fileHandler) {
+        walk(targetPaths, ScanOptions.defaults(), fileHandler);
+    }
+
+    /** Walks the given target paths honoring the supplied scan options. */
+    public void walk(List<String> targetPaths, ScanOptions options, Consumer<Path> fileHandler) {
+        ScanOptions effectiveOptions = options != null ? options : ScanOptions.defaults();
+
         for (String target : targetPaths) {
             Path rootPath = Paths.get(target);
 
@@ -41,25 +51,44 @@ public class FileWalker {
                 continue;
             }
 
-            walkSingleRoot(rootPath, fileHandler);
+            walkSingleRoot(rootPath, effectiveOptions, fileHandler);
         }
     }
 
-    private void walkSingleRoot(Path rootPath, Consumer<Path> fileHandler) {
+    private void walkSingleRoot(Path rootPath, ScanOptions options, Consumer<Path> fileHandler) {
+        Set<FileVisitOption> visitOptions = options.followSymbolicLinks()
+                ? EnumSet.of(FileVisitOption.FOLLOW_LINKS)
+                : EnumSet.noneOf(FileVisitOption.class);
+
+        int maxDepth = options.recursive() ? Integer.MAX_VALUE : 1;
+
         try {
-            Files.walkFileTree(rootPath, new SimpleFileVisitor<Path>() {
+            Files.walkFileTree(rootPath, visitOptions, maxDepth, new SimpleFileVisitor<Path>() {
 
                 @Override
                 public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                    if (isExcluded(dir)) {
+                    // Never skip the root itself, even if it's hidden or would otherwise be excluded —
+                    // the person explicitly chose to scan it.
+                    boolean isRoot = dir.equals(rootPath);
+
+                    if (!isRoot && options.excludeConfiguredPaths() && isExcluded(dir)) {
                         log.debug("Skipping excluded directory: {}", dir);
                         return FileVisitResult.SKIP_SUBTREE;
                     }
+
+                    if (!isRoot && !options.includeHiddenFiles() && isHiddenSafe(dir)) {
+                        log.debug("Skipping hidden directory: {}", dir);
+                        return FileVisitResult.SKIP_SUBTREE;
+                    }
+
                     return FileVisitResult.CONTINUE;
                 }
 
                 @Override
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                    if (!options.includeHiddenFiles() && isHiddenSafe(file)) {
+                        return FileVisitResult.CONTINUE;
+                    }
                     fileHandler.accept(file);
                     return FileVisitResult.CONTINUE;
                 }
@@ -72,6 +101,14 @@ public class FileWalker {
             });
         } catch (IOException e) {
             log.error("Error walking directory tree starting at {}: {}", rootPath, e.getMessage());
+        }
+    }
+
+    private boolean isHiddenSafe(Path path) {
+        try {
+            return Files.isHidden(path);
+        } catch (IOException e) {
+            return false;
         }
     }
 
