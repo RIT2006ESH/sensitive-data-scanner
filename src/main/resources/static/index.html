@@ -1,59 +1,282 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Sensitive Data Scanner</title>
-<link rel="stylesheet" href="/style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sensitive Data Scanner</title>
+  <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <h1>Sensitive Data Scanner Dashboard</h1>
 
-  <div class="status-bar">
-    <span id="status-badge" class="badge idle">IDLE</span>
-    <span id="current-file" class="current-file"></span>
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-icon">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/></svg>
+    </span>
+    <div>
+      <h1>Sensitive Data Scanner</h1>
+      <p>Scan files and folders for sensitive data</p>
+    </div>
   </div>
-
-  <div class="actions">
-    <input type="text" id="scan-path-input" placeholder="Optional: specific file/folder path (leave blank for full configured scan)" style="flex:1; padding:8px; border-radius:6px; border:1px solid #ccc;">
-    <select id="pii-type-select" multiple size="3" style="padding:8px; border-radius:6px; border:1px solid #ccc;" title="Ctrl/Cmd-click to select multiple. Leave nothing selected to detect all types.">
-    </select>
-    <button onclick="triggerScan()">Run scan now</button>
-    <button id="download-btn" onclick="downloadLatest()" disabled>Download latest report</button>
+  <div class="topbar-actions">
+    <span id="status-badge" class="badge idle">Idle</span>
+    <button class="icon-btn" id="detection-rules-btn" title="Detection Rules" aria-label="Detection Rules">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/><path d="M9 12l2 2 4-4"/></svg>
+    </button>
+    <button class="icon-btn" id="settings-btn" title="Settings" aria-label="Settings">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+    </button>
+    <button class="btn btn-secondary" id="export-report-btn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+      Export Report
+    </button>
   </div>
+</header>
 
-  <div class="cards">
-    <div class="card critical"><div class="label">Critical</div><div class="value" id="count-critical">0</div></div>
-    <div class="card medium"><div class="label">Medium</div><div class="value" id="count-medium">0</div></div>
-    <div class="card normal"><div class="label">Normal</div><div class="value" id="count-normal">0</div></div>
-    <div class="card"><div class="label">Files scanned</div><div class="value" id="count-scanned">0</div></div>
-    <div class="card"><div class="label">Files skipped</div><div class="value" id="count-skipped">0</div></div>
-  </div>
+<main class="content">
 
-  <h2 style="font-size:16px;">Live findings</h2>
-  <table>
-    <thead>
+  <!-- ===== 1. SCAN CONFIGURATION ===== -->
+  <section class="panel-section">
+    <h2 class="section-title">1. Scan Configuration</h2>
+    <div class="config-grid">
+
+      <div class="config-col">
+        <label class="field-label">Scan Path</label>
+        <div class="path-row">
+          <input type="text" id="scan-path-input" class="path-input" placeholder="Leave blank for full configured scan">
+          <button class="btn btn-secondary" id="browse-btn" type="button">Browse</button>
+        </div>
+        <div class="field-hint">Leave blank for full configured scan</div>
+      </div>
+
+      <div class="config-col">
+        <label class="field-label">PII Types <span class="field-label-sub">(Select one or more)</span></label>
+        <div class="pii-chip-group" id="pii-chip-group"></div>
+      </div>
+
+      <div class="config-col">
+        <label class="field-label">Scan Options</label>
+        <div class="scan-options" title="Reflects application.yml — configure via backend settings">
+          <label class="checkbox-row"><input type="checkbox" checked disabled><span>Recursive Scan</span></label>
+          <label class="checkbox-row"><input type="checkbox" checked disabled><span>Include Hidden Files</span></label>
+          <label class="checkbox-row"><input type="checkbox" checked disabled><span>Exclude Configured Paths</span></label>
+          <label class="checkbox-row"><input type="checkbox" disabled><span>Follow Symbolic Links</span></label>
+          <label class="checkbox-row"><input type="checkbox" disabled><span>File Type Filters</span>
+            <button class="btn btn-tiny" id="configure-filters-btn" type="button">Configure</button>
+          </label>
+        </div>
+      </div>
+
+      <div class="config-col config-col-run">
+        <button class="btn btn-primary btn-run" onclick="triggerScan()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          Run Scan
+        </button>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ===== 2. SCAN STATUS ===== -->
+  <section class="panel-section">
+    <h2 class="section-title">2. Scan Status</h2>
+    <div class="status-panel">
+      <div class="status-top">
+        <div class="status-icon-wrap" id="status-icon-wrap">
+          <svg id="status-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/></svg>
+        </div>
+        <div>
+          <div class="status-heading" id="status-heading">Idle</div>
+          <div class="status-subheading" id="status-subheading">No scan running</div>
+        </div>
+      </div>
+
+      <div class="status-metrics">
+        <div class="status-metric">
+          <div class="status-metric-label">Files Scanned</div>
+          <div class="status-metric-value" id="dash-scanned">0</div>
+        </div>
+        <div class="status-metric">
+          <div class="status-metric-label">Files Skipped</div>
+          <div class="status-metric-value" id="status-skipped">0</div>
+        </div>
+        <div class="status-metric">
+          <div class="status-metric-label">Findings Detected</div>
+          <div class="status-metric-value findings" id="status-findings">0</div>
+        </div>
+        <div class="status-metric">
+          <div class="status-metric-label">Time Elapsed</div>
+          <div class="status-metric-value" id="status-elapsed">00:00:00</div>
+        </div>
+      </div>
+
+      <div class="progress-track" id="progress-track">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+
+      <div class="status-bottom-row">
+        <div><span class="status-bottom-label">Current File</span> <span id="current-file" class="current-file">–</span></div>
+        <div class="status-times">
+          <span><span class="status-bottom-label">Started</span> <span id="status-started">–</span></span>
+          <span><span class="status-bottom-label">Completed</span> <span id="status-completed">–</span></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 3. SCAN SUMMARY ===== -->
+  <section class="panel-section">
+    <h2 class="section-title">3. Scan Summary</h2>
+    <div class="summary-cards">
+      <div class="summary-card critical">
+        <div class="summary-card-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/></svg>
+        </div>
+        <div class="summary-card-label">Critical</div>
+        <div class="summary-card-value" id="dash-critical">0</div>
+        <div class="summary-card-pct" id="pct-critical">0%</div>
+      </div>
+      <div class="summary-card medium">
+        <div class="summary-card-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/></svg>
+        </div>
+        <div class="summary-card-label">Medium</div>
+        <div class="summary-card-value" id="dash-medium">0</div>
+        <div class="summary-card-pct" id="pct-medium">0%</div>
+      </div>
+      <div class="summary-card normal">
+        <div class="summary-card-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>
+        </div>
+        <div class="summary-card-label">Normal</div>
+        <div class="summary-card-value" id="dash-normal">0</div>
+        <div class="summary-card-pct" id="pct-normal">0%</div>
+      </div>
+      <div class="summary-card plain">
+        <div class="summary-card-icon plain"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg></div>
+        <div class="summary-card-label">Files Scanned</div>
+        <div class="summary-card-value" id="summary-scanned">0</div>
+      </div>
+      <div class="summary-card plain">
+        <div class="summary-card-icon plain"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg></div>
+        <div class="summary-card-label">Files Skipped</div>
+        <div class="summary-card-value" id="summary-skipped">0</div>
+      </div>
+      <div class="summary-card plain">
+        <div class="summary-card-icon plain"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg></div>
+        <div class="summary-card-label">Total Findings</div>
+        <div class="summary-card-value" id="summary-total-findings">0</div>
+      </div>
+      <div class="summary-card plain">
+        <div class="summary-card-icon plain"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div>
+        <div class="summary-card-label">Scan Duration</div>
+        <div class="summary-card-value" id="summary-duration">00:00:00</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 4. FINDINGS ===== -->
+  <section class="panel-section">
+    <div class="section-title-row">
+      <h2 class="section-title">4. Findings (<span id="findings-count">0</span>)</h2>
+    </div>
+
+    <div class="findings-toolbar">
+      <div class="search-input-wrap">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+        <input type="text" id="findings-search" placeholder="Search by file name, path or value...">
+      </div>
+      <select id="risk-filter">
+        <option value="">All Risk Levels</option>
+        <option value="CRITICAL">Critical</option>
+        <option value="MEDIUM">Medium</option>
+        <option value="NORMAL">Normal</option>
+      </select>
+      <select id="type-filter">
+        <option value="">All PII Types</option>
+      </select>
+      <button class="btn btn-secondary" id="clear-filters-btn">Clear Filters</button>
+      <button class="btn btn-secondary btn-push-right" id="export-findings-btn">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+        Export Findings
+      </button>
+    </div>
+
+    <table>
+      <thead>
       <tr>
-        <th>File name</th>
-        <th>File path</th>
-        <th>Type</th>
-        <th>Risk level</th>
-        <th>Masked value</th>
-        <th>Scan timestamp</th>
-        <th>File created</th>
-        <th>File modified</th>
+        <th>File Name</th><th>File Path</th><th>PII Type</th><th>Risk Level</th>
+        <th>Masked Value</th><th>Scan Timestamp</th><th>File Created</th><th>File Modified</th>
       </tr>
-    </thead>
-    <tbody id="findings-body"></tbody>
-  </table>
+      </thead>
+      <tbody id="findings-body"></tbody>
+    </table>
+    <div class="pagination" id="findings-pagination"></div>
+  </section>
 
-  <h2 style="font-size:16px;">Scan history</h2>
-  <table>
-    <thead>
-      <tr><th>Run ID</th><th>Status</th><th>Started</th><th>Critical</th><th>Medium</th><th>Normal</th><th>Report</th></tr>
-    </thead>
-    <tbody id="history-body"></tbody>
-  </table>
+  <!-- ===== 5. SCAN HISTORY ===== -->
+  <section class="panel-section">
+    <h2 class="section-title">5. Scan History</h2>
+    <table>
+      <thead>
+      <tr><th>Run ID</th><th>Status</th><th>Scan Path</th><th>Started</th><th>Duration</th><th>Critical</th><th>Medium</th><th>Normal</th><th>Total Findings</th><th>Report</th></tr>
+      </thead>
+      <tbody id="history-body"></tbody>
+    </table>
+    <div class="pagination" id="history-pagination"></div>
+  </section>
 
-  <script src="/dashboard.js"></script>
+  <!-- ===== DETECTION RULES (secondary) ===== -->
+  <section class="panel-section collapsible" id="detection-rules-section">
+    <h2 class="section-title">Detection Rules</h2>
+    <div class="grid-3">
+      <div class="panel">
+        <h3 class="panel-title">Card Number</h3>
+        <p class="rule-desc">13&ndash;19 digit sequences, either unbroken or grouped in uniform blocks of 4 (e.g. <code>4111 1111 1111 1111</code>).</p>
+        <p class="rule-desc"><strong>Validation:</strong> Luhn checksum.</p>
+      </div>
+      <div class="panel">
+        <h3 class="panel-title">Aadhaar Number</h3>
+        <p class="rule-desc">12 digits, grouped in blocks of 4. First digit restricted to 2&ndash;9 per UIDAI format (never starts with 0 or 1).</p>
+        <p class="rule-desc"><strong>Validation:</strong> Verhoeff checksum.</p>
+      </div>
+      <div class="panel">
+        <h3 class="panel-title">PAN Number</h3>
+        <p class="rule-desc">Format <code>AAAA A 9999 A</code>. 4th letter restricted to real holder-type codes (A, B, C, F, G, H, J, L, P, T).</p>
+        <p class="rule-desc"><strong>Validation:</strong> Structural format only.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SETTINGS (secondary) ===== -->
+  <section class="panel-section collapsible" id="settings-section">
+    <h2 class="section-title">Settings</h2>
+    <div class="panel">
+      <p class="field-hint" style="margin-bottom:16px;">Configuration is managed in <code>application.yml</code>. This view is read-only.</p>
+      <div id="settings-content"></div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ===== BROWSE FOLDER MODAL ===== -->
+<div class="modal-overlay" id="browse-modal-overlay" hidden>
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Select a Folder</h3>
+      <button class="icon-btn" id="browse-modal-close" aria-label="Close">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="modal-path" id="browse-current-path">–</div>
+    <div class="modal-list" id="browse-folder-list"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="browse-modal-cancel">Cancel</button>
+      <button class="btn btn-primary" id="browse-modal-select">Select This Folder</button>
+    </div>
+  </div>
+</div>
+
+<script src="/dashboard.js"></script>
 </body>
 </html>
