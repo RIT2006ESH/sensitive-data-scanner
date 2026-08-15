@@ -26,13 +26,18 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.function.Consumer;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 
 @Component
 public class ScanOrchestrator {
@@ -72,61 +77,96 @@ public class ScanOrchestrator {
         this.resultsHolder = resultsHolder;
     }
 
-    /** Scans the configured target-drives for all supported data types. */
     public ScanSummary runScan() {
         return runScan(null, null);
     }
 
-    /** Scans the given target paths (or configured drives if null/empty) for all supported data types. */
     public ScanSummary runScan(List<String> targetPaths) {
         return runScan(targetPaths, null);
     }
 
-    /**
-     * Scans the given target paths (or configured drives if null/empty), detecting
-     * only the given data types (or all supported types if null/empty).
-     */
     public ScanSummary runScan(List<String> targetPaths, Set<SensitiveDataType> enabledTypes) {
         String runId = UUID.randomUUID().toString();
         LocalDateTime startTime = LocalDateTime.now();
+        long scanStartNanos = System.nanoTime();
         ScanContext context = new ScanContext(runId, startTime);
         ScanRunRecord runRecord = resultsHolder.startRun(runId, startTime);
 
-        log.info("Starting scan run {}{}{}", runId,
+        int permits = appProperties.getConcurrency() > 0
+                ? appProperties.getConcurrency()
+                : Runtime.getRuntime().availableProcessors() * 4;
+
+        log.info("Starting scan run {}{}{} (concurrency: {})", runId,
                 (targetPaths == null || targetPaths.isEmpty()) ? "" : " (custom paths: " + targetPaths + ")",
-                (enabledTypes == null || enabledTypes.isEmpty()) ? "" : " (types: " + enabledTypes + ")");
+                (enabledTypes == null || enabledTypes.isEmpty()) ? "" : " (types: " + enabledTypes + ")",
+                permits);
+
+        ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+        Semaphore inFlight = new Semaphore(permits);
 
         try {
-            Consumer<Path> fileHandler = file -> {
-                runRecord.setCurrentFile(file.toString());
-                processFile(file, context, runRecord, enabledTypes);
-            };
+            fileWalker.walk(buildWalkTargets(targetPaths), file -> {
+                try {
+                    inFlight.acquire();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+                executor.submit(() -> {
+                    try {
+                        runRecord.setCurrentFile(file.toString());
+                        processFile(file, context, runRecord, enabledTypes);
+                    } finally {
+                        inFlight.release();
+                    }
+                });
+            });
 
-            if (targetPaths == null || targetPaths.isEmpty()) {
-                fileWalker.walk(fileHandler);
-            } else {
-                fileWalker.walk(targetPaths, fileHandler);
+            executor.shutdown();
+            boolean finished = executor.awaitTermination(24, TimeUnit.HOURS);
+            if (!finished) {
+                log.warn("Scan run {} did not finish within the 24h safety timeout; forcing shutdown.", runId);
+                executor.shutdownNow();
             }
 
             log.info("Discovery and processing complete for run {}: {} files scanned, {} skipped",
                     runId, context.getFilesScanned(), context.getFilesSkipped());
 
+            long reportWriteStartNanos = System.nanoTime();
             Path reportPath = writeReport(context);
+            context.setReportWriteNanos(System.nanoTime() - reportWriteStartNanos);
 
             LocalDateTime endTime = LocalDateTime.now();
             resultsHolder.completeRun(runId, endTime, reportPath);
+
+            long totalScanNanos = System.nanoTime() - scanStartNanos;
 
             log.info("Scan run {} complete. Scanned: {}, Skipped: {}, Errors: {}, Findings: {}",
                     runId, context.getFilesScanned(), context.getFilesSkipped(),
                     context.getErrorsEncountered(), context.getFindings().size());
 
+            logPerformanceBreakdown(runId, context, totalScanNanos, permits);
+
             return new ScanSummary(context.getStartTime(), endTime, context.getFilesScanned(),
                     context.getFilesSkipped(), context.getErrorsEncountered(), context.getFindings());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("Scan run {} interrupted", runId);
+            resultsHolder.failRun(runId, LocalDateTime.now());
+            throw new RuntimeException("Scan interrupted", e);
         } catch (RuntimeException e) {
             log.error("Scan run {} failed: {}", runId, e.getMessage(), e);
             resultsHolder.failRun(runId, LocalDateTime.now());
             throw e;
+        } finally {
+            if (!executor.isShutdown()) {
+                executor.shutdownNow();
+            }
         }
+    }
+
+    private List<String> buildWalkTargets(List<String> targetPaths) {
+        return (targetPaths == null || targetPaths.isEmpty()) ? appProperties.getTargetDrives() : targetPaths;
     }
 
     private void processFile(Path file, ScanContext context, ScanRunRecord runRecord, Set<SensitiveDataType> enabledTypes) {
@@ -146,8 +186,14 @@ public class ScanOrchestrator {
         }
 
         try {
+            long extractStart = System.nanoTime();
             String extractedText = extractor.extractText(file);
+            context.recordExtractionTime(extension, System.nanoTime() - extractStart);
+
+            long detectStart = System.nanoTime();
             detectAndRecordFindings(extractedText, file, context, runRecord, enabledTypes);
+            context.recordDetectionTime(System.nanoTime() - detectStart);
+
             context.incrementFilesScanned();
             runRecord.incrementFilesScanned();
         } catch (IOException e) {
@@ -192,12 +238,15 @@ public class ScanOrchestrator {
 
         LocalDateTime fileCreationTime = null;
         LocalDateTime fileModifiedTime = null;
+        long attrStart = System.nanoTime();
         try {
             BasicFileAttributes attrs = Files.readAttributes(file, BasicFileAttributes.class);
             fileCreationTime = toLocalDateTime(attrs.creationTime().toInstant());
             fileModifiedTime = toLocalDateTime(attrs.lastModifiedTime().toInstant());
         } catch (IOException e) {
             log.debug("Could not read file attributes for {}: {}", file, e.getMessage());
+        } finally {
+            context.recordAttributeReadTime(System.nanoTime() - attrStart);
         }
 
         ScanResult result = new ScanResult(
@@ -243,5 +292,63 @@ public class ScanOrchestrator {
         String name = file.getFileName().toString();
         int lastDot = name.lastIndexOf('.');
         return (lastDot == -1) ? "" : name.substring(lastDot + 1);
+    }
+
+    private void logPerformanceBreakdown(String runId, ScanContext context, long totalScanNanos, int concurrency) {
+        double totalMs = toMillis(totalScanNanos);
+        double extractionMs = toMillis(context.getTotalExtractionNanos());
+        double detectionMs = toMillis(context.getTotalDetectionNanos());
+        double attrMs = toMillis(context.getTotalAttributeReadNanos());
+        double reportMs = toMillis(context.getReportWriteNanos());
+        double accountedMs = extractionMs + detectionMs + attrMs + reportMs;
+        double effectiveParallelism = totalMs > 0 ? accountedMs / totalMs : 0;
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("\n===== Performance breakdown for run ").append(runId).append(" =====\n");
+        sb.append(String.format("  Concurrency limit:      %d workers%n", concurrency));
+        sb.append(String.format("  Wall-clock duration:    %s%n", formatDuration(totalMs)));
+        sb.append(String.format("  Effective parallelism:  %.1fx (aggregate worker time / wall-clock time)%n", effectiveParallelism));
+        sb.append(String.format("  Text extraction (aggregate across workers): %s%n", formatDuration(extractionMs)));
+        sb.append(String.format("  Pattern detection (aggregate):              %s%n", formatDuration(detectionMs)));
+        sb.append(String.format("  File attribute reads (aggregate):           %s%n", formatDuration(attrMs)));
+        sb.append(String.format("  Report writing (single-threaded, at end):   %s%n", formatDuration(reportMs)));
+
+        Map<String, Long> extTime = context.getExtensionTimeNanos();
+        Map<String, Integer> extCount = context.getExtensionFileCount();
+        if (!extTime.isEmpty()) {
+            sb.append("  --- Extraction time by file type (slowest average first) ---\n");
+            extTime.entrySet().stream()
+                    .sorted((a, b) -> {
+                        double avgA = a.getValue() / (double) extCount.getOrDefault(a.getKey(), 1);
+                        double avgB = b.getValue() / (double) extCount.getOrDefault(b.getKey(), 1);
+                        return Double.compare(avgB, avgA);
+                    })
+                    .forEach(entry -> {
+                        String ext = entry.getKey();
+                        int count = extCount.getOrDefault(ext, 0);
+                        double totalExtMs = toMillis(entry.getValue());
+                        double avgMs = count == 0 ? 0 : totalExtMs / count;
+                        sb.append(String.format("    .%-6s  %5d files   total %8s   avg %6.2f ms/file%n",
+                                ext, count, formatDuration(totalExtMs), avgMs));
+                    });
+        }
+
+        sb.append("=====================================================");
+        log.info(sb.toString());
+    }
+
+    private double toMillis(long nanos) { return nanos / 1_000_000.0; }
+
+    private String formatDuration(double millis) {
+        if (millis < 1000) {
+            return String.format("%.0f ms", millis);
+        }
+        Duration d = Duration.ofMillis((long) millis);
+        long h = d.toHours();
+        long m = d.toMinutesPart();
+        long s = d.toSecondsPart();
+        if (h > 0) return String.format("%dh %dm %ds", h, m, s);
+        if (m > 0) return String.format("%dm %ds", m, s);
+        return String.format("%.1f s", millis / 1000.0);
     }
 }
