@@ -2,11 +2,7 @@ package com.yourorg.scanner.model;
 
 import java.time.LocalDateTime;
 
-/**
- * A single confirmed finding: one sensitive value detected, validated, and
- * masked in one file. This is the object that ultimately becomes one row
- * in the scan report (CSV/Excel) and one row in the web dashboard.
- */
+
 public class ScanResult {
 
     private final String fileName;
@@ -15,15 +11,20 @@ public class ScanResult {
     private final RiskLevel riskLevel;
     private final String maskedValue;
     private final LocalDateTime scanTimestamp;
+    private final LocalDateTime fileCreationTime;
+    private final LocalDateTime fileModifiedTime;
 
     public ScanResult(String fileName, String filePath, SensitiveDataType dataType,
-                      RiskLevel riskLevel, String maskedValue, LocalDateTime scanTimestamp) {
+                      RiskLevel riskLevel, String maskedValue, LocalDateTime scanTimestamp,
+                      LocalDateTime fileCreationTime, LocalDateTime fileModifiedTime) {
         this.fileName = fileName;
         this.filePath = filePath;
         this.dataType = dataType;
         this.riskLevel = riskLevel;
         this.maskedValue = maskedValue;
         this.scanTimestamp = scanTimestamp;
+        this.fileCreationTime = fileCreationTime;
+        this.fileModifiedTime = fileModifiedTime;
     }
 
     public String getFileName() {
@@ -48,5 +49,13 @@ public class ScanResult {
 
     public LocalDateTime getScanTimestamp() {
         return scanTimestamp;
+    }
+
+    public LocalDateTime getFileCreationTime() {
+        return fileCreationTime;
+    }
+
+    public LocalDateTime getFileModifiedTime() {
+        return fileModifiedTime;
     }
 }
