@@ -4,7 +4,8 @@ spring:
 
 scanner:
   target-drives:
-  - C:\Users\Asus\Desktop\testing
+    - C:\
+    - D:\
 
   supported-extensions:
     - pdf
