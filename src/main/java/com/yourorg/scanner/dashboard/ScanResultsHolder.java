@@ -48,8 +48,8 @@ public class ScanResultsHolder {
         loadManifest();
     }
 
-    public ScanRunRecord startRun(String runId, LocalDateTime startTime) {
-        ScanRunRecord record = new ScanRunRecord(runId, startTime);
+    public ScanRunRecord startRun(String runId, LocalDateTime startTime, String scanPath) {
+        ScanRunRecord record = new ScanRunRecord(runId, startTime, scanPath);
         runsById.put(runId, record);
         runOrder.add(0, runId);
         currentRunId = runId;
@@ -122,6 +122,7 @@ public class ScanResultsHolder {
                         record.getStatus().name(),
                         record.getStartTime(),
                         record.getEndTime(),
+                        record.getScanPath() == null ? "" : record.getScanPath(),
                         record.getFilesScanned(),
                         record.getFilesSkipped(),
                         record.getErrorsEncountered(),
@@ -145,7 +146,7 @@ public class ScanResultsHolder {
         try (BufferedReader reader = Files.newBufferedReader(manifestPath)) {
             int restoredCount = 0;
             for (CSVRecord csvRecord : CSVFormat.DEFAULT.parse(reader)) {
-                if (csvRecord.size() < 11) {
+                if (csvRecord.size() < 12) {
                     continue;
                 }
                 try {
@@ -153,16 +154,17 @@ public class ScanResultsHolder {
                     ScanRunStatus status = ScanRunStatus.valueOf(csvRecord.get(1));
                     LocalDateTime startTime = LocalDateTime.parse(csvRecord.get(2));
                     LocalDateTime endTime = LocalDateTime.parse(csvRecord.get(3));
-                    int filesScanned = Integer.parseInt(csvRecord.get(4));
-                    int filesSkipped = Integer.parseInt(csvRecord.get(5));
-                    int errors = Integer.parseInt(csvRecord.get(6));
-                    long critical = Long.parseLong(csvRecord.get(7));
-                    long medium = Long.parseLong(csvRecord.get(8));
-                    long normal = Long.parseLong(csvRecord.get(9));
-                    String reportPathStr = csvRecord.get(10);
+                    String scanPath = csvRecord.get(4).isBlank() ? null : csvRecord.get(4);
+                    int filesScanned = Integer.parseInt(csvRecord.get(5));
+                    int filesSkipped = Integer.parseInt(csvRecord.get(6));
+                    int errors = Integer.parseInt(csvRecord.get(7));
+                    long critical = Long.parseLong(csvRecord.get(8));
+                    long medium = Long.parseLong(csvRecord.get(9));
+                    long normal = Long.parseLong(csvRecord.get(10));
+                    String reportPathStr = csvRecord.get(11);
                     Path reportPath = reportPathStr.isBlank() ? null : Paths.get(reportPathStr);
 
-                    ScanRunRecord record = ScanRunRecord.restored(runId, status, startTime, endTime,
+                    ScanRunRecord record = ScanRunRecord.restored(runId, status, startTime, endTime, scanPath,
                             filesScanned, filesSkipped, errors, critical, medium, normal, reportPath);
 
                     runsById.put(runId, record);
