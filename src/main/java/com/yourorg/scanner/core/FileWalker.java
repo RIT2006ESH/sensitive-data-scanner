@@ -15,15 +15,6 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.List;
 import java.util.function.Consumer;
 
-/**
- * Walks target drives/folders and streams each discovered file to a
- * callback as soon as it's found, rather than collecting a full list
- * first. This lets processing (and any live progress reporting) start
- * immediately instead of waiting for an entire tree to be enumerated.
- *
- * Excluded paths/folder-names from AppProperties always apply, regardless
- * of whether the walk targets the configured drives or an ad-hoc override.
- */
 @Component
 public class FileWalker {
 
