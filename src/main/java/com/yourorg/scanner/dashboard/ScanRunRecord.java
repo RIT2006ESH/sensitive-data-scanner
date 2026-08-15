@@ -5,8 +5,9 @@ import com.yourorg.scanner.model.ScanResult;
 
 import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
 
@@ -14,7 +15,7 @@ public class ScanRunRecord {
 
     private final String runId;
     private final LocalDateTime startTime;
-    private final List<ScanResult> findings = new CopyOnWriteArrayList<>();
+    private final List<ScanResult> findings = Collections.synchronizedList(new ArrayList<>());
     private final AtomicInteger filesScanned = new AtomicInteger(0);
     private final AtomicInteger filesSkipped = new AtomicInteger(0);
     private final AtomicInteger errorsEncountered = new AtomicInteger(0);
@@ -43,7 +44,6 @@ public class ScanRunRecord {
         this.restoredNormal = restoredNormal;
     }
 
-
     public static ScanRunRecord restored(String runId, ScanRunStatus status, LocalDateTime startTime,
                                          LocalDateTime endTime, int filesScanned, int filesSkipped,
                                          int errorsEncountered, long critical, long medium, long normal,
@@ -62,21 +62,10 @@ public class ScanRunRecord {
         findings.add(result);
     }
 
-    public void setCurrentFile(String currentFile) {
-        this.currentFile = currentFile;
-    }
-
-    public void incrementFilesScanned() {
-        filesScanned.incrementAndGet();
-    }
-
-    public void incrementFilesSkipped() {
-        filesSkipped.incrementAndGet();
-    }
-
-    public void incrementErrorsEncountered() {
-        errorsEncountered.incrementAndGet();
-    }
+    public void setCurrentFile(String currentFile) { this.currentFile = currentFile; }
+    public void incrementFilesScanned() { filesScanned.incrementAndGet(); }
+    public void incrementFilesSkipped() { filesSkipped.incrementAndGet(); }
+    public void incrementErrorsEncountered() { errorsEncountered.incrementAndGet(); }
 
     public void complete(LocalDateTime endTime, Path reportPath) {
         this.endTime = endTime;
@@ -99,59 +88,29 @@ public class ScanRunRecord {
                 case NORMAL -> restoredNormal;
             };
         }
-        return findings.stream().filter(f -> f.getRiskLevel() == level).count();
-    }
-
-
-    public List<ScanResult> getRecentFindings(int limit) {
-        int size = findings.size();
-        if (size <= limit) {
-            return findings;
+        synchronized (findings) {
+            return findings.stream().filter(f -> f.getRiskLevel() == level).count();
         }
-        return findings.subList(size - limit, size);
     }
 
-    public boolean isRestored() {
-        return restored;
+    /** Defensive copy of the most recent {@code limit} findings, safe to read while writers are active. */
+    public List<ScanResult> getRecentFindings(int limit) {
+        synchronized (findings) {
+            int size = findings.size();
+            int from = Math.max(0, size - limit);
+            return new ArrayList<>(findings.subList(from, size));
+        }
     }
 
-    public String getRunId() {
-        return runId;
-    }
-
-    public ScanRunStatus getStatus() {
-        return status;
-    }
-
-    public LocalDateTime getStartTime() {
-        return startTime;
-    }
-
-    public LocalDateTime getEndTime() {
-        return endTime;
-    }
-
-    public List<ScanResult> getFindings() {
-        return findings;
-    }
-
-    public int getFilesScanned() {
-        return filesScanned.get();
-    }
-
-    public int getFilesSkipped() {
-        return filesSkipped.get();
-    }
-
-    public int getErrorsEncountered() {
-        return errorsEncountered.get();
-    }
-
-    public Path getReportPath() {
-        return reportPath;
-    }
-
-    public String getCurrentFile() {
-        return currentFile;
-    }
+    public boolean isRestored() { return restored; }
+    public String getRunId() { return runId; }
+    public ScanRunStatus getStatus() { return status; }
+    public LocalDateTime getStartTime() { return startTime; }
+    public LocalDateTime getEndTime() { return endTime; }
+    public List<ScanResult> getFindings() { return findings; }
+    public int getFilesScanned() { return filesScanned.get(); }
+    public int getFilesSkipped() { return filesSkipped.get(); }
+    public int getErrorsEncountered() { return errorsEncountered.get(); }
+    public Path getReportPath() { return reportPath; }
+    public String getCurrentFile() { return currentFile; }
 }
