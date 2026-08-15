@@ -51,7 +51,19 @@
 
       <div class="config-col">
         <label class="field-label">PII Types <span class="field-label-sub">(Select one or more)</span></label>
-        <div class="pii-chip-group" id="pii-chip-group"></div>
+        <div class="pii-dropdown" id="pii-dropdown">
+          <button type="button" class="pii-dropdown-toggle" id="pii-dropdown-toggle">
+            <span id="pii-dropdown-label">All PII Types</span>
+            <svg class="pii-dropdown-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <div class="pii-dropdown-panel" id="pii-dropdown-panel" hidden>
+            <div class="pii-chip-group" id="pii-chip-group"></div>
+            <div class="pii-dropdown-footer">
+              <button type="button" id="pii-select-all-btn">Select All</button>
+              <button type="button" id="pii-clear-btn">Clear</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="config-col">
@@ -60,10 +72,6 @@
           <label class="checkbox-row"><input type="checkbox" checked disabled><span>Recursive Scan</span></label>
           <label class="checkbox-row"><input type="checkbox" checked disabled><span>Include Hidden Files</span></label>
           <label class="checkbox-row"><input type="checkbox" checked disabled><span>Exclude Configured Paths</span></label>
-          <label class="checkbox-row"><input type="checkbox" disabled><span>Follow Symbolic Links</span></label>
-          <label class="checkbox-row"><input type="checkbox" disabled><span>File Type Filters</span>
-            <button class="btn btn-tiny" id="configure-filters-btn" type="button">Configure</button>
-          </label>
         </div>
       </div>
 
@@ -243,6 +251,46 @@
       <div class="panel">
         <h3 class="panel-title">PAN Number</h3>
         <p class="rule-desc">Format <code>AAAA A 9999 A</code>. 4th letter restricted to real holder-type codes (A, B, C, F, G, H, J, L, P, T).</p>
+        <p class="rule-desc"><strong>Validation:</strong> Structural format only.</p>
+      </div>
+      <div class="panel">
+        <h3 class="panel-title">Passport Number</h3>
+        <p class="rule-desc">1 letter followed by 7 digits (e.g. <code>A1234567</code>), the most common Indian passport format.</p>
+        <p class="rule-desc"><strong>Validation:</strong> Structural format only &mdash; format varies, higher false-positive risk.</p>
+      </div>
+      <div class="panel">
+        <h3 class="panel-title">Driving Licence</h3>
+        <p class="rule-desc">State code + RTO code + issue year + serial number (e.g. <code>MH12 20110012345</code>).</p>
+        <p class="rule-desc"><strong>Validation:</strong> Structural format only &mdash; format varies by state.</p>
+      </div>
+      <div class="panel">
+        <h3 class="panel-title">Voter ID (EPIC)</h3>
+        <p class="rule-desc">3 letters followed by 7 digits (e.g. <code>ABC1234567</code>).</p>
+        <p class="rule-desc"><strong>Validation:</strong> Structural format only.</p>
+      </div>
+      <div class="panel">
+        <h3 class="panel-title">Bank Account Number</h3>
+        <p class="rule-desc">9&ndash;18 digit sequence, typically detected near contextual keywords such as &ldquo;account no.&rdquo;</p>
+        <p class="rule-desc"><strong>Validation:</strong> Structural format only &mdash; no fixed format, lowest confidence.</p>
+      </div>
+      <div class="panel">
+        <h3 class="panel-title">IFSC Code</h3>
+        <p class="rule-desc">4 letters, followed by <code>0</code>, followed by 6 alphanumeric characters (e.g. <code>HDFC0001234</code>).</p>
+        <p class="rule-desc"><strong>Validation:</strong> Structural format only.</p>
+      </div>
+      <div class="panel">
+        <h3 class="panel-title">UPI ID</h3>
+        <p class="rule-desc">Identifier followed by a known PSP handle (e.g. <code>name@ybl</code>, <code>name@okaxis</code>).</p>
+        <p class="rule-desc"><strong>Validation:</strong> Structural format, checked against known PSP handle suffixes.</p>
+      </div>
+      <div class="panel">
+        <h3 class="panel-title">Phone Number</h3>
+        <p class="rule-desc">10 digits, first digit restricted to 6&ndash;9 per Indian mobile numbering format.</p>
+        <p class="rule-desc"><strong>Validation:</strong> Structural format only.</p>
+      </div>
+      <div class="panel">
+        <h3 class="panel-title">Email Address</h3>
+        <p class="rule-desc">Standard <code>local@domain</code> pattern.</p>
         <p class="rule-desc"><strong>Validation:</strong> Structural format only.</p>
       </div>
     </div>
