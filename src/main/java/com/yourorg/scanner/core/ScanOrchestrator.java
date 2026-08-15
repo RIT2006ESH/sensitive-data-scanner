@@ -30,6 +30,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -38,6 +39,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Component
 public class ScanOrchestrator {
@@ -78,34 +81,51 @@ public class ScanOrchestrator {
     }
 
     public ScanSummary runScan() {
-        return runScan(null, null);
+        return runScan(null, null, null, null);
     }
 
     public ScanSummary runScan(List<String> targetPaths) {
-        return runScan(targetPaths, null);
+        return runScan(targetPaths, null, null, null);
     }
 
     public ScanSummary runScan(List<String> targetPaths, Set<SensitiveDataType> enabledTypes) {
+        return runScan(targetPaths, enabledTypes, null, null);
+    }
+
+    public ScanSummary runScan(List<String> targetPaths, Set<SensitiveDataType> enabledTypes,
+                               Map<SensitiveDataType, Pattern> customPatterns) {
+        return runScan(targetPaths, enabledTypes, customPatterns, null);
+    }
+
+    public ScanSummary runScan(List<String> targetPaths, Set<SensitiveDataType> enabledTypes,
+                               Map<SensitiveDataType, Pattern> customPatterns, ScanOptions scanOptions) {
+        ScanOptions options = scanOptions != null ? scanOptions : ScanOptions.defaults();
+
         String runId = UUID.randomUUID().toString();
         LocalDateTime startTime = LocalDateTime.now();
         long scanStartNanos = System.nanoTime();
         ScanContext context = new ScanContext(runId, startTime);
-        ScanRunRecord runRecord = resultsHolder.startRun(runId, startTime);
+
+        String scanPathDisplay = (targetPaths == null || targetPaths.isEmpty())
+                ? String.join(", ", appProperties.getTargetDrives())
+                : String.join(", ", targetPaths);
+        ScanRunRecord runRecord = resultsHolder.startRun(runId, startTime, scanPathDisplay);
 
         int permits = appProperties.getConcurrency() > 0
                 ? appProperties.getConcurrency()
                 : Runtime.getRuntime().availableProcessors() * 4;
 
-        log.info("Starting scan run {}{}{} (concurrency: {})", runId,
+        log.info("Starting scan run {}{}{}{} (concurrency: {})", runId,
                 (targetPaths == null || targetPaths.isEmpty()) ? "" : " (custom paths: " + targetPaths + ")",
                 (enabledTypes == null || enabledTypes.isEmpty()) ? "" : " (types: " + enabledTypes + ")",
+                (customPatterns == null || customPatterns.isEmpty()) ? "" : " (custom regex overrides: " + customPatterns.keySet() + ")",
                 permits);
 
         ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
         Semaphore inFlight = new Semaphore(permits);
 
         try {
-            fileWalker.walk(buildWalkTargets(targetPaths), file -> {
+            fileWalker.walk(buildWalkTargets(targetPaths), options, file -> {
                 try {
                     inFlight.acquire();
                 } catch (InterruptedException e) {
@@ -115,7 +135,7 @@ public class ScanOrchestrator {
                 executor.submit(() -> {
                     try {
                         runRecord.setCurrentFile(file.toString());
-                        processFile(file, context, runRecord, enabledTypes);
+                        processFile(file, context, runRecord, enabledTypes, customPatterns, options);
                     } finally {
                         inFlight.release();
                     }
@@ -169,10 +189,16 @@ public class ScanOrchestrator {
         return (targetPaths == null || targetPaths.isEmpty()) ? appProperties.getTargetDrives() : targetPaths;
     }
 
-    private void processFile(Path file, ScanContext context, ScanRunRecord runRecord, Set<SensitiveDataType> enabledTypes) {
+    private void processFile(Path file, ScanContext context, ScanRunRecord runRecord,
+                             Set<SensitiveDataType> enabledTypes, Map<SensitiveDataType, Pattern> customPatterns,
+                             ScanOptions options) {
         String extension = getExtension(file);
 
-        if (!appProperties.getSupportedExtensions().contains(extension.toLowerCase())) {
+        List<String> allowedExtensions = (options.fileTypeFilters() != null && !options.fileTypeFilters().isEmpty())
+                ? options.fileTypeFilters()
+                : appProperties.getSupportedExtensions();
+
+        if (!allowedExtensions.contains(extension.toLowerCase())) {
             context.incrementFilesSkipped();
             runRecord.incrementFilesSkipped();
             return;
@@ -191,7 +217,7 @@ public class ScanOrchestrator {
             context.recordExtractionTime(extension, System.nanoTime() - extractStart);
 
             long detectStart = System.nanoTime();
-            detectAndRecordFindings(extractedText, file, context, runRecord, enabledTypes);
+            detectAndRecordFindings(extractedText, file, context, runRecord, enabledTypes, customPatterns);
             context.recordDetectionTime(System.nanoTime() - detectStart);
 
             context.incrementFilesScanned();
@@ -208,17 +234,30 @@ public class ScanOrchestrator {
     }
 
     private void detectAndRecordFindings(String extractedText, Path file, ScanContext context,
-                                         ScanRunRecord runRecord, Set<SensitiveDataType> enabledTypes) {
+                                         ScanRunRecord runRecord, Set<SensitiveDataType> enabledTypes,
+                                         Map<SensitiveDataType, Pattern> customPatterns) {
         for (SensitiveDataDetector detector : detectorRegistry.getDetectors()) {
-            if (enabledTypes != null && !enabledTypes.isEmpty() && !enabledTypes.contains(detector.getType())) {
+            SensitiveDataType type = detector.getType();
+
+            if (enabledTypes != null && !enabledTypes.isEmpty() && !enabledTypes.contains(type)) {
                 continue;
             }
 
-            List<String> candidates = detector.detectCandidates(extractedText);
+            List<String> candidates;
+            Pattern customPattern = (customPatterns != null) ? customPatterns.get(type) : null;
+            if (customPattern != null) {
+                candidates = new ArrayList<>();
+                Matcher m = customPattern.matcher(extractedText);
+                while (m.find()) {
+                    candidates.add(m.group());
+                }
+            } else {
+                candidates = detector.detectCandidates(extractedText);
+            }
 
             for (String candidate : candidates) {
-                if (isValid(candidate, detector.getType())) {
-                    recordFinding(candidate, detector.getType(), file, context, runRecord);
+                if (isValid(candidate, type)) {
+                    recordFinding(candidate, type, file, context, runRecord);
                 }
             }
         }
@@ -228,7 +267,7 @@ public class ScanOrchestrator {
         return switch (type) {
             case CARD_NUMBER -> luhnValidator.isValid(candidate);
             case AADHAAR_NUMBER -> aadhaarValidator.isValid(candidate);
-            case PAN_NUMBER -> true;
+            default -> true; // no public checksum for these types; structural regex match only
         };
     }
 
@@ -271,12 +310,10 @@ public class ScanOrchestrator {
     private Path writeReport(ScanContext context) {
         String format = appProperties.getReport().getFormat();
         ReportGenerator generator = reportWriterFactory.getGenerator(format);
-
         if (generator == null) {
             log.error("No report generator found for format '{}'. Report not written.", format);
             return null;
         }
-
         try {
             Path outputDirectory = Paths.get(appProperties.getReport().getOutputDirectory());
             Path reportPath = generator.generateReport(context.getFindings(), outputDirectory);
@@ -307,32 +344,11 @@ public class ScanOrchestrator {
         sb.append("\n===== Performance breakdown for run ").append(runId).append(" =====\n");
         sb.append(String.format("  Concurrency limit:      %d workers%n", concurrency));
         sb.append(String.format("  Wall-clock duration:    %s%n", formatDuration(totalMs)));
-        sb.append(String.format("  Effective parallelism:  %.1fx (aggregate worker time / wall-clock time)%n", effectiveParallelism));
-        sb.append(String.format("  Text extraction (aggregate across workers): %s%n", formatDuration(extractionMs)));
-        sb.append(String.format("  Pattern detection (aggregate):              %s%n", formatDuration(detectionMs)));
-        sb.append(String.format("  File attribute reads (aggregate):           %s%n", formatDuration(attrMs)));
-        sb.append(String.format("  Report writing (single-threaded, at end):   %s%n", formatDuration(reportMs)));
-
-        Map<String, Long> extTime = context.getExtensionTimeNanos();
-        Map<String, Integer> extCount = context.getExtensionFileCount();
-        if (!extTime.isEmpty()) {
-            sb.append("  --- Extraction time by file type (slowest average first) ---\n");
-            extTime.entrySet().stream()
-                    .sorted((a, b) -> {
-                        double avgA = a.getValue() / (double) extCount.getOrDefault(a.getKey(), 1);
-                        double avgB = b.getValue() / (double) extCount.getOrDefault(b.getKey(), 1);
-                        return Double.compare(avgB, avgA);
-                    })
-                    .forEach(entry -> {
-                        String ext = entry.getKey();
-                        int count = extCount.getOrDefault(ext, 0);
-                        double totalExtMs = toMillis(entry.getValue());
-                        double avgMs = count == 0 ? 0 : totalExtMs / count;
-                        sb.append(String.format("    .%-6s  %5d files   total %8s   avg %6.2f ms/file%n",
-                                ext, count, formatDuration(totalExtMs), avgMs));
-                    });
-        }
-
+        sb.append(String.format("  Effective parallelism:  %.1fx%n", effectiveParallelism));
+        sb.append(String.format("  Text extraction (aggregate): %s%n", formatDuration(extractionMs)));
+        sb.append(String.format("  Pattern detection (aggregate): %s%n", formatDuration(detectionMs)));
+        sb.append(String.format("  File attribute reads (aggregate): %s%n", formatDuration(attrMs)));
+        sb.append(String.format("  Report writing: %s%n", formatDuration(reportMs)));
         sb.append("=====================================================");
         log.info(sb.toString());
     }
@@ -340,13 +356,9 @@ public class ScanOrchestrator {
     private double toMillis(long nanos) { return nanos / 1_000_000.0; }
 
     private String formatDuration(double millis) {
-        if (millis < 1000) {
-            return String.format("%.0f ms", millis);
-        }
+        if (millis < 1000) return String.format("%.0f ms", millis);
         Duration d = Duration.ofMillis((long) millis);
-        long h = d.toHours();
-        long m = d.toMinutesPart();
-        long s = d.toSecondsPart();
+        long h = d.toHours(), m = d.toMinutesPart(), s = d.toSecondsPart();
         if (h > 0) return String.format("%dh %dm %ds", h, m, s);
         if (m > 0) return String.format("%dm %ds", m, s);
         return String.format("%.1f s", millis / 1000.0);
