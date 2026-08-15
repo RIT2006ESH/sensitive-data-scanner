@@ -86,11 +86,7 @@ public class DashboardController {
                 .body(resource);
     }
 
-    /**
-     * Triggers a scan. With no body, scans configured target-drives for all
-     * supported data types. "paths" and "dataTypes" in the body each narrow
-     * that scope independently -- either, both, or neither may be provided.
-     */
+
     @PostMapping("/trigger")
     public ResponseEntity<String> triggerScan(@RequestBody(required = false) ScanTriggerRequest request) {
         if (resultsHolder.isScanRunning()) {
