@@ -94,8 +94,6 @@ public class ScanRunRecord {
             return findings.stream().filter(f -> f.getRiskLevel() == level).count();
         }
     }
-
-    /** Defensive copy of the most recent {@code limit} findings, safe to read while writers are active. */
     public List<ScanResult> getRecentFindings(int limit) {
         synchronized (findings) {
             int size = findings.size();

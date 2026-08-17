@@ -2,7 +2,6 @@ package com.yourorg.scanner.core;
 
 import java.util.List;
 
-/** Scan-time overrides for how the file walker and extension filter behave. */
 public record ScanOptions(
         boolean recursive,
         boolean includeHiddenFiles,
