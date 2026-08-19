@@ -33,7 +33,11 @@ public class ScanResultsHolder {
 
     private final Map<String, ScanRunRecord> runsById = new ConcurrentHashMap<>();
     private final List<String> runOrder = Collections.synchronizedList(new ArrayList<>());
-    private volatile String currentRunId;
+
+    // Ordered by start time (oldest first). The LAST entry is the most recently
+    // started still-running scan, which is what "current" shows on the dashboard.
+    // Multiple scans can run concurrently; this just tracks which one is "current" to display.
+    private final List<String> runningOrder = Collections.synchronizedList(new ArrayList<>());
 
     private final AppProperties appProperties;
     private Path manifestPath;
@@ -52,7 +56,7 @@ public class ScanResultsHolder {
         ScanRunRecord record = new ScanRunRecord(runId, startTime, scanPath);
         runsById.put(runId, record);
         runOrder.add(0, runId);
-        currentRunId = runId;
+        runningOrder.add(runId);
         return record;
     }
 
@@ -62,9 +66,7 @@ public class ScanResultsHolder {
             record.complete(endTime, reportPath);
             appendToManifest(record);
         }
-        if (runId.equals(currentRunId)) {
-            currentRunId = null;
-        }
+        runningOrder.remove(runId);
     }
 
     public void failRun(String runId, LocalDateTime endTime) {
@@ -73,13 +75,20 @@ public class ScanResultsHolder {
             record.fail(endTime);
             appendToManifest(record);
         }
-        if (runId.equals(currentRunId)) {
-            currentRunId = null;
-        }
+        runningOrder.remove(runId);
     }
 
+    /** Returns the most recently STARTED scan that is still running, if any. This is what the
+     *  dashboard's live "current" panel displays; other concurrently-running scans keep running
+     *  in the background and simply appear in Scan History once they finish. */
     public Optional<ScanRunRecord> getCurrentRun() {
-        return currentRunId == null ? Optional.empty() : Optional.ofNullable(runsById.get(currentRunId));
+        synchronized (runningOrder) {
+            if (runningOrder.isEmpty()) {
+                return Optional.empty();
+            }
+            String mostRecentRunId = runningOrder.get(runningOrder.size() - 1);
+            return Optional.ofNullable(runsById.get(mostRecentRunId));
+        }
     }
 
     public Optional<ScanRunRecord> getRun(String runId) {
@@ -105,8 +114,10 @@ public class ScanResultsHolder {
         }
     }
 
+    /** True if ANY scan is currently running (informational only — triggering a new
+     *  scan no longer blocks on this; multiple scans may run concurrently). */
     public boolean isScanRunning() {
-        return currentRunId != null;
+        return !runningOrder.isEmpty();
     }
 
     private void appendToManifest(ScanRunRecord record) {

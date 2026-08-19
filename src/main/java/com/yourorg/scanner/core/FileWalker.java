@@ -13,9 +13,14 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.function.Consumer;
 
 @Component
@@ -39,19 +44,57 @@ public class FileWalker {
         walk(targetPaths, ScanOptions.defaults(), fileHandler);
     }
 
-    /** Walks the given target paths honoring the supplied scan options. */
+    /**
+     * Walks the given target paths honoring the supplied scan options.
+     * When more than one root is given (e.g. C:\ and D:\), each root is walked
+     * concurrently on its own virtual thread rather than sequentially, so multi-drive
+     * or multi-folder scans complete in roughly the time of the slowest single root
+     * instead of the sum of all of them.
+     */
     public void walk(List<String> targetPaths, ScanOptions options, Consumer<Path> fileHandler) {
         ScanOptions effectiveOptions = options != null ? options : ScanOptions.defaults();
 
+        List<Path> validRoots = new ArrayList<>();
         for (String target : targetPaths) {
             Path rootPath = Paths.get(target);
-
             if (!Files.exists(rootPath)) {
                 log.warn("Configured target path does not exist, skipping: {}", target);
                 continue;
             }
+            validRoots.add(rootPath);
+        }
 
-            walkSingleRoot(rootPath, effectiveOptions, fileHandler);
+        if (validRoots.isEmpty()) {
+            return;
+        }
+
+        if (validRoots.size() == 1) {
+            // No benefit spinning up a separate thread for a single root.
+            walkSingleRoot(validRoots.get(0), effectiveOptions, fileHandler);
+            return;
+        }
+
+        log.info("Walking {} target paths concurrently: {}", validRoots.size(), validRoots);
+
+        ExecutorService rootExecutor = Executors.newVirtualThreadPerTaskExecutor();
+        List<Future<?>> futures = new ArrayList<>();
+        for (Path rootPath : validRoots) {
+            futures.add(rootExecutor.submit(() -> walkSingleRoot(rootPath, effectiveOptions, fileHandler)));
+        }
+        rootExecutor.shutdown();
+
+        for (Future<?> future : futures) {
+            try {
+                future.get();
+            } catch (ExecutionException e) {
+                log.error("Error walking one of the target roots: {}",
+                        e.getCause() != null ? e.getCause().getMessage() : e.getMessage());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.warn("Interrupted while waiting for a target root to finish walking");
+                rootExecutor.shutdownNow();
+                return;
+            }
         }
     }
 
@@ -67,8 +110,6 @@ public class FileWalker {
 
                 @Override
                 public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                    // Never skip the root itself, even if it's hidden or would otherwise be excluded —
-                    // the person explicitly chose to scan it.
                     boolean isRoot = dir.equals(rootPath);
 
                     if (!isRoot && options.excludeConfiguredPaths() && isExcluded(dir)) {

@@ -1,7 +1,7 @@
 package com.yourorg.scanner.dashboard;
 
-import com.yourorg.scanner.core.ScanOrchestrator;
 import com.yourorg.scanner.core.ScanOptions;
+import com.yourorg.scanner.core.ScanOrchestrator;
 import com.yourorg.scanner.model.ScanResult;
 import com.yourorg.scanner.model.SensitiveDataType;
 import org.springframework.core.io.FileSystemResource;
@@ -78,9 +78,10 @@ public class DashboardController {
 
     @PostMapping("/trigger")
     public ResponseEntity<String> triggerScan(@RequestBody(required = false) ScanTriggerRequest request) {
-        if (resultsHolder.isScanRunning()) {
-            return ResponseEntity.status(409).body("A scan is already running.");
-        }
+        // Multiple scans are now allowed to run concurrently. Each gets its own
+        // ScanOrchestrator.runScan() call on its own thread with fully independent
+        // state (ScanContext, ScanRunRecord) — there's no shared mutable state between
+        // concurrent runs that requires serializing them.
 
         List<String> paths = (request != null) ? request.paths() : null;
         List<String> dataTypeNames = (request != null) ? request.dataTypes() : null;
