@@ -25,6 +25,7 @@
         <commons-csv.version>1.11.0</commons-csv.version>
     </properties>
 
+    <!-- Text extraction libraries, matching the web app's extractor package -->
     <dependencies>
         <!-- Core Spring Boot (includes logging via Logback/SLF4J) -->
         <dependency>
