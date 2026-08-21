@@ -18,6 +18,10 @@ public class AppProperties {
 
     private int concurrency = 0;
 
+    /** Shared secret the desktop scan agent must send in the
+     *  X-Agent-Api-Key header when reporting results to /api/scans/external-report. */
+    private String agentApiKey;
+
     public static class Report {
         private String outputDirectory;
         private String format;
@@ -42,4 +46,6 @@ public class AppProperties {
     public void setReport(Report report) { this.report = report; }
     public int getConcurrency() { return concurrency; }
     public void setConcurrency(int concurrency) { this.concurrency = concurrency; }
+    public String getAgentApiKey() { return agentApiKey; }
+    public void setAgentApiKey(String agentApiKey) { this.agentApiKey = agentApiKey; }
 }

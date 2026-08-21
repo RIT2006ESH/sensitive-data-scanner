@@ -1,11 +1,8 @@
 spring:
-  application:
-    name: sensitive-data-scanner
-
-scanner:
-  target-drives:
-    - C:\
-    - D:\
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
 
   supported-extensions:
     - pdf
