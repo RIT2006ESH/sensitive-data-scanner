@@ -28,10 +28,25 @@ import java.nio.file.Paths;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
-
+/**
+ * Coordinates the full scan pipeline end-to-end:
+ * walk -> extract -> detect -> validate -> mask -> classify risk ->
+ * record (for the dashboard) -> report.
+ * Every run is tracked live in ScanResultsHolder so the web dashboard can
+ * poll current status, current file, and risk-categorized findings.
+ *
+ * Scans are always scoped to explicit target paths (e.g. a user-uploaded
+ * file or temp folder) — the orchestrator never scans the host machine's
+ * drives on its own.
+ */
 @Component
 public class ScanOrchestrator {
 
@@ -74,9 +89,19 @@ public class ScanOrchestrator {
      * Runs a scan scoped to exactly the given target paths — typically a
      * single uploaded file's temp path, or a temp folder holding an
      * uploaded batch. This is the only entry point; callers (e.g. the
-     * upload controller) must supply what to scan.
+     * upload controller or the scheduler) must supply what to scan.
+     *
+     * @param targetPaths    paths to scan (files/folders); must not be null/empty
+     * @param enabledTypes   if non-null/non-empty, only detectors whose type is in
+     *                       this set run; if null or empty, all registered detectors run
+     * @param customPatterns if a type has an entry here, its regex replaces that
+     *                       detector's own candidate-matching for this run only
+     * @param options        walk behavior (recursion, hidden files, exclusions, symlinks, extension filters)
      */
-    public ScanSummary runScan(List<String> targetPaths) {
+    public ScanSummary runScan(List<String> targetPaths,
+                               Set<SensitiveDataType> enabledTypes,
+                               Map<SensitiveDataType, Pattern> customPatterns,
+                               ScanOptions options) {
         String runId = UUID.randomUUID().toString();
         LocalDateTime startTime = LocalDateTime.now();
         String scanPath = String.join(", ", targetPaths);
@@ -85,9 +110,9 @@ public class ScanOrchestrator {
         log.info("Starting scan run {} for targets: {}", runId, targetPaths);
 
         try {
-            fileWalker.walk(targetPaths, file -> {
+            fileWalker.walk(targetPaths, options, file -> {
                 record.setCurrentFile(file.toAbsolutePath().toString());
-                processFile(file, record);
+                processFile(file, record, enabledTypes, customPatterns);
             });
 
             Path reportPath = writeReport(record);
@@ -109,7 +134,9 @@ public class ScanOrchestrator {
         }
     }
 
-    private void processFile(Path file, ScanRunRecord record) {
+    private void processFile(Path file, ScanRunRecord record,
+                             Set<SensitiveDataType> enabledTypes,
+                             Map<SensitiveDataType, Pattern> customPatterns) {
         String extension = getExtension(file);
 
         if (!appProperties.getSupportedExtensions().contains(extension.toLowerCase())) {
@@ -134,7 +161,8 @@ public class ScanOrchestrator {
             } catch (IOException e) {
                 log.debug("Could not read file attributes for {}: {}", file, e.getMessage());
             }
-            detectAndRecordFindings(extractedText, file, record, creationTime, modifiedTime);
+            detectAndRecordFindings(extractedText, file, record, creationTime, modifiedTime,
+                    enabledTypes, customPatterns);
             record.incrementFilesScanned();
         } catch (IOException e) {
             log.warn("Failed to extract text from {}: {}", file, e.getMessage());
@@ -143,16 +171,39 @@ public class ScanOrchestrator {
     }
 
     private void detectAndRecordFindings(String extractedText, Path file, ScanRunRecord record,
-                                         LocalDateTime creationTime, LocalDateTime modifiedTime) {
+                                         LocalDateTime creationTime, LocalDateTime modifiedTime,
+                                         Set<SensitiveDataType> enabledTypes,
+                                         Map<SensitiveDataType, Pattern> customPatterns) {
         for (SensitiveDataDetector detector : detectorRegistry.getDetectors()) {
-            List<String> candidates = detector.detectCandidates(extractedText);
+            SensitiveDataType type = detector.getType();
+
+            if (enabledTypes != null && !enabledTypes.isEmpty() && !enabledTypes.contains(type)) {
+                continue;
+            }
+
+            List<String> candidates;
+            Pattern customPattern = (customPatterns != null) ? customPatterns.get(type) : null;
+            if (customPattern != null) {
+                candidates = matchAll(customPattern, extractedText);
+            } else {
+                candidates = detector.detectCandidates(extractedText);
+            }
 
             for (String candidate : candidates) {
-                if (isValid(candidate, detector.getType())) {
-                    recordFinding(candidate, detector.getType(), file, record, creationTime, modifiedTime);
+                if (isValid(candidate, type)) {
+                    recordFinding(candidate, type, file, record, creationTime, modifiedTime);
                 }
             }
         }
+    }
+
+    private List<String> matchAll(Pattern pattern, String text) {
+        List<String> matches = new ArrayList<>();
+        Matcher matcher = pattern.matcher(text);
+        while (matcher.find()) {
+            matches.add(matcher.group());
+        }
+        return matches;
     }
 
     private boolean isValid(String candidate, SensitiveDataType type) {
