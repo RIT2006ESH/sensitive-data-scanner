@@ -69,6 +69,17 @@ public class ScanRunRecord {
     public void incrementFilesSkipped() { filesSkipped.incrementAndGet(); }
     public void incrementErrorsEncountered() { errorsEncountered.incrementAndGet(); }
 
+    /**
+     * Bulk-sets counts in one call rather than incrementing one at a time.
+     * Used for runs completed elsewhere (e.g. a local scan agent) that report
+     * back a finished total rather than being tracked file-by-file here.
+     */
+    public void setCounts(int filesScanned, int filesSkipped, int errorsEncountered) {
+        this.filesScanned.set(filesScanned);
+        this.filesSkipped.set(filesSkipped);
+        this.errorsEncountered.set(errorsEncountered);
+    }
+
     public void complete(LocalDateTime endTime, Path reportPath) {
         this.endTime = endTime;
         this.reportPath = reportPath;

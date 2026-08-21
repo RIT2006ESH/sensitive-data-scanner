@@ -2,6 +2,7 @@ package com.yourorg.scanner.dashboard;
 
 import com.yourorg.scanner.config.AppProperties;
 import com.yourorg.scanner.model.RiskLevel;
+import com.yourorg.scanner.model.ScanResult;
 import jakarta.annotation.PostConstruct;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
@@ -23,6 +24,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 
@@ -76,6 +78,58 @@ public class ScanResultsHolder {
             appendToManifest(record);
         }
         runningOrder.remove(runId);
+    }
+
+    /**
+     * Records a scan that ran entirely outside this server — e.g. the desktop
+     * scan agent, which walks the customer's own local drive and only reports
+     * the finished result back here. Unlike startRun/completeRun, this is a
+     * single call: by the time the agent's HTTP request arrives the scan is
+     * already finished, so the record is created already-complete and goes
+     * straight into history (it never appears as a "currently running" scan).
+     *
+     * Raw file contents are never received here — only masked findings and
+     * counts, exactly as the agent produced them locally.
+     */
+    public ScanRunRecord recordExternalRun(String runId,
+                                           LocalDateTime startTime,
+                                           LocalDateTime endTime,
+                                           String scanPath,
+                                           int filesScanned,
+                                           int filesSkipped,
+                                           int errorsEncountered,
+                                           List<ScanResult> findings,
+                                           ScanRunStatus status) {
+        String effectiveRunId = (runId == null || runId.isBlank())
+                ? UUID.randomUUID().toString()
+                : runId;
+
+        ScanRunRecord record = new ScanRunRecord(effectiveRunId, startTime, scanPath);
+
+        if (findings != null) {
+            for (ScanResult finding : findings) {
+                record.addFinding(finding);
+            }
+        }
+        record.setCounts(filesScanned, filesSkipped, errorsEncountered);
+
+        if (status == ScanRunStatus.FAILED) {
+            record.fail(endTime);
+        } else {
+            // No server-side report file exists for agent scans (the agent
+            // scanned the customer's own machine) — reportPath stays null,
+            // so the dashboard's download button naturally has nothing to offer.
+            record.complete(endTime, null);
+        }
+
+        runsById.put(effectiveRunId, record);
+        runOrder.add(0, effectiveRunId);
+        appendToManifest(record);
+
+        log.info("Recorded external scan run {} ({}) — files scanned: {}, findings: {}",
+                effectiveRunId, status, filesScanned, record.getFindings().size());
+
+        return record;
     }
 
     /** Returns the most recently STARTED scan that is still running, if any. This is what the
